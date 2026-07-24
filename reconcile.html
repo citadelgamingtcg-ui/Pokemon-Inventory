@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paragon — Post-Show Reconciliation</title>
+<style>
+  :root{
+    --bg:#121212; --panel:#1B1A18; --panel2:#232119;
+    --gold:#C9A15A; --gold-dim:#8C7240;
+    --ink:#EFE9DC; --sub:#A29A88; --line:#332F27;
+    --green:#5DBB7A; --red:#D96A5B; --blue:#6FA8C9;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font:15px/1.5 "Georgia",serif;-webkit-font-smoothing:antialiased}
+  .mono{font-family:"Courier New",monospace}
+  header{padding:28px 20px 18px;text-align:center;border-bottom:1px solid var(--line)}
+  header h1{font-size:26px;letter-spacing:.35em;color:var(--gold);font-weight:700}
+  header .sub{letter-spacing:.3em;font-size:12px;color:var(--sub);margin-top:4px}
+  header .tag{margin-top:10px;font-size:14px;color:var(--ink);font-style:italic}
+  .wrap{max-width:860px;margin:0 auto;padding:18px 14px 120px}
+
+  /* progress */
+  .progress{margin:16px 0 8px}
+  .bar{height:10px;background:var(--panel2);border:1px solid var(--line);border-radius:6px;overflow:hidden;display:flex}
+  .bar .found{background:var(--green);height:100%;transition:width .25s}
+  .bar .sold{background:var(--gold);height:100%;transition:width .25s}
+  .legend{display:flex;gap:18px;justify-content:center;font-size:12.5px;color:var(--sub);margin-top:8px;flex-wrap:wrap}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:middle}
+
+  /* stats */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;text-align:center}
+  .stat .lbl{font-size:11px;letter-spacing:.14em;color:var(--sub);text-transform:uppercase}
+  .stat .val{font-size:21px;margin-top:4px;font-weight:700}
+
+  /* controls */
+  .controls{display:flex;gap:10px;margin:10px 0 14px;flex-wrap:wrap}
+  .controls input[type=search]{flex:1;min-width:200px;background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:10px 14px;border-radius:8px;font:inherit}
+  .controls input[type=search]:focus{outline:2px solid var(--gold-dim);outline-offset:1px}
+  select{background:var(--panel);border:1px solid var(--line);color:var(--ink);padding:10px;border-radius:8px;font:inherit}
+
+  /* item rows */
+  .item{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:8px;display:flex;gap:12px;align-items:center;cursor:pointer;transition:border-color .15s, background .15s}
+  .item:hover{border-color:var(--gold-dim)}
+  .item.found{border-color:var(--green);background:#18201A}
+  .item.sold{border-color:var(--gold);background:#221D12}
+  .item img{width:42px;height:58px;object-fit:contain;border-radius:4px;background:#0d0d0d;flex:none}
+  .item .noimg{width:42px;height:58px;border-radius:4px;background:#0d0d0d;flex:none;display:flex;align-items:center;justify-content:center;color:#3a362e;font-size:20px}
+  .iinfo{flex:1;min-width:0}
+  .iname{font-weight:700;font-size:15.5px}
+  .imeta{font-size:12.5px;color:var(--sub)}
+  .iprice{text-align:right;flex:none;font-family:"Courier New",monospace;font-size:13px;color:var(--sub)}
+  .iprice b{color:var(--ink);font-size:15px}
+  .state{flex:none;display:flex;gap:6px}
+  .state button{font:inherit;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--line);border-radius:20px;padding:6px 12px;color:var(--sub);background:transparent;cursor:pointer}
+  .state button.on-found{border-color:var(--green);color:var(--green);background:#18251B}
+  .state button.on-sold{border-color:var(--gold);color:var(--gold);background:#2A2213}
+
+  .solddetail{display:none;width:100%;padding-top:10px;margin-top:10px;border-top:1px dashed var(--line);gap:14px;align-items:center;flex-wrap:wrap}
+  .item.sold .solddetail{display:flex}
+  .item.found .solddetail{display:flex}
+  .solddetail label{font-size:12.5px;color:var(--sub)}
+  .solddetail input{width:92px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:7px 9px;border-radius:6px;font-family:"Courier New",monospace}
+  .qtybox{display:flex;align-items:center;gap:8px}
+  .qtybox button{width:28px;height:28px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font-size:16px;cursor:pointer}
+
+  /* footer actions */
+  .actions{position:fixed;left:0;right:0;bottom:0;background:rgba(18,18,18,.96);border-top:1px solid var(--gold-dim);padding:12px 14px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;backdrop-filter:blur(6px)}
+  .btn{font:inherit;letter-spacing:.06em;padding:11px 18px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+  .btn:hover{border-color:var(--gold-dim)}
+  .btn.gold{background:var(--gold);border-color:var(--gold);color:#161310;font-weight:700}
+  .btn.gold:disabled{opacity:.4;cursor:not-allowed}
+  .btn:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+
+  .note{font-size:12.5px;color:var(--sub);text-align:center;margin-top:6px}
+  #status{text-align:center;padding:40px 0;color:var(--sub)}
+  .toast{position:fixed;top:16px;left:50%;transform:translateX(-50%);background:var(--panel);border:1px solid var(--gold);color:var(--ink);padding:10px 18px;border-radius:8px;z-index:99;display:none}
+  @media (max-width:560px){ .iprice{display:none} .state{width:80px} }
+</style>
+</head>
+<body>
+<header style="position:relative">
+  <a href="index.html" style="position:absolute;left:16px;top:50%;transform:translateY(-50%);color:var(--sub);text-decoration:none;font-size:13px;letter-spacing:.05em" title="Back to Inventory">&larr; Inventory</a>
+  <h1>PARAGON</h1>
+  <div class="sub">C O L L E C T I B L E S</div>
+  <div class="tag">Post-Show Reconciliation</div>
+</header>
+
+<div class="wrap">
+  <div id="status">Connecting to your inventory&hellip;</div>
+
+  <div id="app" style="display:none">
+    <div class="progress">
+      <div class="bar"><div class="found" id="bar-found"></div><div class="sold" id="bar-sold"></div></div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--green)"></span>In the case (verified)</span>
+        <span><span class="dot" style="background:var(--gold)"></span>Sold at show</span>
+        <span><span class="dot" style="background:#3a362e"></span>Not counted yet</span>
+      </div>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="lbl">Counted</div><div class="val" id="s-counted">0 / 0</div></div>
+      <div class="stat"><div class="lbl">Items Sold</div><div class="val" style="color:var(--gold)" id="s-sold">0</div></div>
+      <div class="stat"><div class="lbl">Show Revenue</div><div class="val" style="color:var(--green)" id="s-rev">$0.00</div></div>
+      <div class="stat"><div class="lbl">Spent Buying</div><div class="val" style="color:var(--red)" id="s-spent">$0.00</div></div>
+      <div class="stat"><div class="lbl">Net Cash</div><div class="val" id="s-net">$0.00</div></div>
+      <div class="stat"><div class="lbl">Profit vs Cost</div><div class="val" id="s-profit">—</div></div>
+      <div class="stat"><div class="lbl">Remaining Value</div><div class="val" id="s-remain">$0.00</div></div>
+    </div>
+
+    <div class="controls">
+      <input type="search" id="q" placeholder="Search name, set, number&hellip;" aria-label="Search inventory">
+      <select id="filter" aria-label="Filter items">
+        <option value="all">All items</option>
+        <option value="uncounted">Not counted yet</option>
+        <option value="found">In the case</option>
+        <option value="sold">Sold</option>
+        <option value="purchases">Bought at show (0)</option>
+      </select>
+      <button class="btn" id="btn-addbuy" type="button">+ Bought at show</button>
+      <button class="btn" id="btn-reset" type="button" title="Clear the saved count and start fresh" style="color:var(--red)">Start over</button>
+    </div>
+
+    <div id="buyform" style="display:none;background:var(--panel);border:1px solid var(--gold-dim);border-radius:10px;padding:14px;margin-bottom:12px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px">
+        <label style="grid-column:1/-1;font-size:12.5px;color:var(--sub)">Card / product name*<br>
+          <span style="display:flex;gap:8px">
+            <input id="b-name" style="flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:9px;border-radius:6px;font:inherit" placeholder="Type a name, then Search to pull TCGPlayer printings">
+            <button class="btn" id="btn-searchcard" type="button">🔍 Search</button>
+          </span>
+          <span style="display:block;font-size:11.5px;color:var(--sub);margin-top:4px">Popular card (Charizard, Mew, Pikachu)? Put the set in the Set box below <b>before</b> searching — it narrows to the right printings.</span></label>
+        <div id="b-results" style="grid-column:1/-1;display:none"></div>
+        <label style="font-size:12.5px;color:var(--sub)">Set<br><input id="b-set" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:9px;border-radius:6px;font:inherit"></label>
+        <label style="font-size:12.5px;color:var(--sub)">Number<br><input id="b-number" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:9px;border-radius:6px;font:inherit"></label>
+        <label style="font-size:12.5px;color:var(--sub)">Condition<br>
+          <select id="b-cond" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:9px;border-radius:6px;font:inherit">
+            <option>NM</option><option>LP</option><option>MP</option><option>HP</option><option>DMG</option><option>Sealed</option>
+          </select></label>
+        <label style="font-size:12.5px;color:var(--sub)">Qty<br><input id="b-qty" type="number" min="1" value="1" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:9px;border-radius:6px;font-family:'Courier New',monospace"></label>
+        <label style="font-size:12.5px;color:var(--sub)">Paid (total) $<br><input id="b-paid" type="number" step="0.01" min="0" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:9px;border-radius:6px;font-family:'Courier New',monospace"></label>
+        <label style="font-size:12.5px;color:var(--sub)">Asking (each) $<br><input id="b-ask" type="number" step="0.01" min="0" style="width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:9px;border-radius:6px;font-family:'Courier New',monospace"></label>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:12px">
+        <button class="btn gold" id="btn-savebuy" type="button">Add purchase</button>
+        <button class="btn" id="btn-cancelbuy" type="button">Close</button>
+      </div>
+    </div>
+
+    <div id="buylist"></div>
+
+    <div id="list"></div>
+    <p class="note">Tap <b style="color:var(--green)">✓ In case</b> or <b style="color:var(--gold)">💰 Sold</b> directly — tap again to un-count. Tapping anywhere else on a row marks it in-case. Your bought cards live under the <b>Bought at show</b> filter.</p>
+  </div>
+</div>
+
+<div class="actions">
+  <button class="btn" id="btn-csv" disabled>Download sold report (CSV)</button>
+  <button class="btn" id="btn-csv2" disabled>Download updated inventory (CSV)</button>
+  <button class="btn" id="btn-csv3" disabled>Download full change report (CSV)</button>
+  <button class="btn gold" id="btn-apply" disabled>Apply sales to inventory system</button>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, getDocs, doc, updateDoc, addDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD_8Q1x-2-WVYa5kGDT0Fj_VyuVjbS2UuU",
+  authDomain: "pokeinventory-3ee20.firebaseapp.com",
+  projectId: "pokeinventory-3ee20",
+  storageBucket: "pokeinventory-3ee20.firebasestorage.app",
+  messagingSenderId: "248123177716",
+  appId: "1:248123177716:web:6cdad358f21fcc99b7bca1"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+
+let items = []; // {id, data, state:'uncounted'|'found'|'sold', remainQty, soldTotal}
+let purchases = []; // {name,set,number,condition,qty,paid,ask}
+const $ = id => document.getElementById(id);
+const money = n => '$' + (n||0).toFixed(2);
+const toast = m => { const t=$('toast'); t.textContent=m; t.style.display='block'; setTimeout(()=>t.style.display='none', 2600); };
+
+const DRAFT_KEY = 'paragon_reconcile_draft';
+function saveDraft(){
+  try{
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      when: Date.now(),
+      states: items.filter(i=>i.state!=='uncounted').map(i=>({id:i.id, state:i.state, remainQty:i.remainQty, soldTotal:i.soldTotal})),
+      purchases
+    }));
+  }catch(e){}
+}
+function restoreDraft(){
+  try{
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if(!raw) return false;
+    const d = JSON.parse(raw);
+    let hits = 0;
+    (d.states||[]).forEach(s => {
+      const it = items.find(i=>i.id===s.id);
+      if(it){ it.state=s.state; it.remainQty=s.remainQty; it.soldTotal=s.soldTotal; hits++; }
+    });
+    purchases = d.purchases || [];
+    if(hits || purchases.length){
+      const age = Math.round((Date.now()-d.when)/60000);
+      toast(`✓ Restored your saved count (${hits} items, ${purchases.length} purchases${age>0?`, from ${age} min ago`:''})`);
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function clearDraft(){ try{ localStorage.removeItem(DRAFT_KEY); }catch(e){} }
+
+async function load(){
+  try{
+    const snap = await getDocs(collection(db,'vendor'));
+    items = snap.docs
+      .map(d => ({ id:d.id, data:{ id:d.id, ...d.data() } }))
+      .filter(x => !x.data.soldPrice)               // only unsold pre-show inventory
+      .map(x => ({ ...x, state:'uncounted', remainQty: x.data.qty||1, soldTotal:0 }))
+      .sort((a,b) => (a.data.name||'').localeCompare(b.data.name||''));
+    if(!items.length){ $('status').textContent = 'No unsold inventory found. Check your rules/connection, or everything is already marked sold.'; return; }
+    restoreDraft();
+    $('status').style.display='none';
+    $('app').style.display='block';
+    renderBuys();
+    render();
+  }catch(e){
+    $('status').innerHTML = 'Could not load inventory: <b>'+e.message+'</b><br>Check your internet connection and Firestore rules.';
+  }
+}
+
+function perUnit(d){ return d.askingPrice || d.tcgPrice || 0; }
+
+function setState(it, target){
+  if(it.state === target){ // tapping the active state un-counts it
+    it.state='uncounted'; it.remainQty=it.data.qty||1; it.soldTotal=0;
+  } else if(target==='found'){
+    it.state='found'; it.remainQty=it.data.qty||1; it.soldTotal=0;
+  } else { // sold
+    it.state='sold'; it.remainQty=0; it.soldTotal = perUnit(it.data) * (it.data.qty||1);
+  }
+  render();
+}
+
+function setRemain(it, v){
+  const q = it.data.qty||1;
+  it.remainQty = Math.max(0, Math.min(q, v));
+  const soldQty = q - it.remainQty;
+  if(soldQty === 0){ it.state='found'; it.soldTotal=0; }
+  else { it.state='sold'; it.soldTotal = perUnit(it.data) * soldQty; }
+  render();
+}
+
+function render(){
+  const q = ($('q').value||'').toLowerCase();
+  const f = $('filter').value;
+  const list = $('list');
+  const showBuys = f==='purchases';
+  $('buylist').style.display = showBuys ? 'block' : 'none';
+  list.style.display = showBuys ? 'none' : 'block';
+  if(showBuys){ renderBuys(); updateStats(); return; }
+  list.innerHTML = items.filter(it => {
+    const d = it.data;
+    const hay = `${d.name||''} ${d.set||''} ${d.number||''}`.toLowerCase();
+    if(q && !hay.includes(q)) return false;
+    if(f!=='all' && it.state!==f && !(f==='uncounted'&&it.state==='uncounted')) return false;
+    return true;
+  }).map(it => {
+    const d = it.data, qty = d.qty||1, soldQty = qty - it.remainQty;
+    return `<div class="item ${it.state==='uncounted'?'':it.state}" data-id="${it.id}" role="group" aria-label="${d.name}">
+      ${d.imageUrl?`<img src="${d.imageUrl}" alt="">`:`<div class="noimg">🂠</div>`}
+      <div class="iinfo">
+        <div class="iname">${d.name||'Unnamed'}${qty>1?` <span style="color:var(--sub);font-weight:400">×${qty}</span>`:''}</div>
+        <div class="imeta">${[d.set, d.number?('#'+d.number):null, d.condition, d.isSealed?'Sealed':null].filter(Boolean).join(' · ')}</div>
+      </div>
+      <div class="iprice">ask <b>${money(perUnit(d))}</b><br>tcg ${money(d.tcgPrice)}</div>
+      <div class="state">
+        <button data-setstate="found" class="${it.state==='found'?'on-found':''}">✓ In case</button>
+        <button data-setstate="sold" class="${it.state==='sold'?'on-sold':''}">${it.state==='sold'&&qty>1?`Sold ${soldQty}/${qty}`:'💰 Sold'}</button>
+      </div>
+      ${it.state!=='uncounted' && (qty>1 || it.state==='sold') ? `<div class="solddetail" data-stop="1">
+          ${qty>1?`<div class="qtybox"><label>In the case</label>
+            <button data-act="minus">−</button><span class="mono">${it.remainQty}</span><button data-act="plus">+</button>
+            <span style="color:var(--sub);font-size:12px">of ${qty}${soldQty?` — sold ${soldQty}`:''}</span></div>`:''}
+          ${soldQty>0 || (it.state==='sold'&&qty===1) ? `<label>Sold for (total) $ <input data-act="price" type="number" step="0.01" min="0" value="${it.soldTotal.toFixed(2)}"></label>`:''}
+        </div>`:''}
+    </div>`;
+  }).join('') || '<div style="text-align:center;color:var(--sub);padding:30px">No items match.</div>';
+
+  updateStats();
+}
+
+$('btn-reset').onclick = () => {
+  if(!confirm('Clear your saved count and all typed-in purchases, and start fresh?')) return;
+  clearDraft();
+  purchases = [];
+  items.forEach(i => { i.state='uncounted'; i.remainQty=i.data.qty||1; i.soldTotal=0; });
+  renderBuys(); render();
+  toast('Count cleared — starting fresh.');
+};
+
+$('btn-addbuy').onclick = () => { $('buyform').style.display='block'; $('b-name').focus(); };
+$('btn-cancelbuy').onclick = () => { $('buyform').style.display='none'; };
+
+let selectedPrinting = null;
+$('b-name').addEventListener('keydown', e => { if(e.key==='Enter'){ e.preventDefault(); $('btn-searchcard').click(); } });
+$('btn-searchcard').onclick = async () => {
+  const q = $('b-name').value.trim();
+  if(!q){ toast('Type a card name first'); return; }
+  const box = $('b-results');
+  box.style.display='block';
+  box.innerHTML = '<div style="color:var(--sub);font-size:13px;padding:6px 0">Searching TCGPlayer…</div>';
+  try{
+    const num = $('b-number').value.trim(), set = $('b-set').value.trim();
+    const res = await fetch(`/search?q=${encodeURIComponent(q)}${num?`&number=${encodeURIComponent(num)}`:''}${set?`&set=${encodeURIComponent(set)}`:''}`);
+    if(!res.ok) throw new Error('Search failed');
+    const cards = (await res.json()).data || [];
+    if(!cards.length){ box.innerHTML = '<div style="color:var(--red);font-size:13px;padding:6px 0">No cards found — try a different spelling, or just fill the fields by hand.</div>'; return; }
+    window._buyResults = cards;
+    box.innerHTML = `<div style="display:flex;gap:10px;align-items:center;margin:4px 0 8px;flex-wrap:wrap">
+        <span style="font-size:12.5px;color:var(--sub)">Select a printing (<span id="b-rescount">${cards.length}</span> found):</span>
+        <input id="b-resfilter" placeholder="Filter by set / number… (e.g. zenith)" style="flex:1;min-width:160px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:7px 9px;border-radius:6px;font:inherit;font-size:12.5px">
+      </div>
+      <div id="b-resgrid" style="display:flex;flex-wrap:wrap;gap:8px;max-height:60vh;overflow-y:auto;padding:2px"></div>`;
+    const grid = document.getElementById('b-resgrid');
+    const drawResults = (filter='') => {
+      const f = filter.toLowerCase();
+      const show = cards.map((c,i)=>({c,i})).filter(({c}) => !f || `${c.set_name||''} ${c.number||''} ${c.rarity||''}`.toLowerCase().includes(f));
+      document.getElementById('b-rescount').textContent = show.length;
+      grid.innerHTML = show.map(({c,i})=>`<div data-pick="${i}" style="width:110px;border:1px solid var(--line);border-radius:8px;padding:6px;cursor:pointer;background:var(--panel2);text-align:center">
+          ${c.image_url?`<img src="${c.image_url}" style="width:70px;height:98px;object-fit:contain;pointer-events:none" loading="lazy">`:''}
+          <div style="font-size:11px;font-weight:700;pointer-events:none">${c.name||''}</div>
+          <div style="font-size:10px;color:var(--sub);pointer-events:none">${c.set_name||''} · #${c.number||''}</div>
+          <div style="font-size:12px;font-weight:700;color:var(--green);pointer-events:none">$${(c.market_price||0).toFixed(2)}</div>
+        </div>`).join('') || '<div style="color:var(--sub);font-size:13px;padding:6px">Nothing matches that filter in these results — if the printing you want isn\'t here, close and search again with the set name in the Set box.</div>';
+    };
+    drawResults();
+    document.getElementById('b-resfilter').addEventListener('input', e => drawResults(e.target.value));
+    document.getElementById('b-resfilter').focus();
+  }catch(e){
+    box.innerHTML = '<div style="color:var(--red);font-size:13px;padding:6px 0">Search unavailable — this only works when the page is opened from your app site (not a local file). Fill the fields by hand instead.</div>';
+  }
+};
+$('b-results').addEventListener('click', e => {
+  const pick = e.target.dataset.pick;
+  if(pick===undefined) return;
+  const c = window._buyResults[parseInt(pick)];
+  selectedPrinting = c;
+  $('b-name').value = c.name || $('b-name').value;
+  $('b-set').value = c.set_name || '';
+  $('b-number').value = c.number || '';
+  if(!$('b-ask').value && c.market_price) $('b-ask').value = c.market_price.toFixed(2);
+  [...$('b-results').querySelectorAll('[data-pick]')].forEach(el=>el.style.borderColor='var(--line)');
+  e.target.closest('[data-pick]').style.borderColor='var(--gold)';
+  toast(`✓ ${c.name} — ${c.set_name} #${c.number} ($${(c.market_price||0).toFixed(2)} market)`);
+});
+
+$('btn-savebuy').onclick = () => {
+  const name = $('b-name').value.trim();
+  if(!name){ toast('Name is required'); $('b-name').focus(); return; }
+  purchases.push({
+    name, set: $('b-set').value.trim(), number: $('b-number').value.trim(),
+    condition: $('b-cond').value, qty: parseInt($('b-qty').value)||1,
+    paid: parseFloat($('b-paid').value)||0, ask: parseFloat($('b-ask').value)||0,
+    tcg: selectedPrinting?.market_price || 0,
+    imageUrl: selectedPrinting?.image_url || null,
+    rarity: selectedPrinting?.rarity || ''
+  });
+  selectedPrinting = null;
+  $('b-results').style.display='none'; $('b-results').innerHTML='';
+  ['b-name','b-set','b-number','b-paid','b-ask'].forEach(id=>$(id).value='');
+  $('b-qty').value='1';
+  $('b-name').focus();
+  renderBuys(); updateStats(); saveDraft();
+  toast('✓ Purchase added — keep going or Close when done.');
+};
+
+function renderBuys(){
+  const opt = [...$('filter').options].find(o=>o.value==='purchases');
+  if(opt) opt.textContent = `Bought at show (${purchases.length})`;
+  $('buylist').innerHTML = purchases.length ? purchases.map((p,idx) => `<div class="item" style="border-color:var(--blue);cursor:default">
+      ${p.imageUrl?`<img src="${p.imageUrl}" alt="">`:`<div class="noimg" style="color:var(--blue)">+</div>`}
+      <div class="iinfo">
+        <div class="iname">${p.name}${p.qty>1?` <span style="color:var(--sub);font-weight:400">×${p.qty}</span>`:''}</div>
+        <div class="imeta">${[p.set, p.number?('#'+p.number):null, p.condition, p.rarity].filter(Boolean).join(' · ')}</div>
+      </div>
+      <div class="iprice">paid $<input data-buypaid="${idx}" type="number" step="0.01" min="0" value="${p.paid.toFixed(2)}" style="width:70px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);padding:4px 6px;border-radius:5px;font-family:'Courier New',monospace"><br>ask ${money(p.ask)}/ea${p.tcg?` · tcg ${money(p.tcg)}`:''}</div>
+      <button data-buyremove="${idx}" style="background:none;border:none;color:var(--red);font-size:18px;cursor:pointer;flex:none" title="Remove">×</button>
+    </div>`).join('') : '<div style="text-align:center;color:var(--sub);padding:30px">No purchases yet — use “+ Bought at show” to add the cards you picked up.</div>';
+}
+$('buylist').addEventListener('click', e => {
+  const idx = e.target.dataset.buyremove;
+  if(idx===undefined) return;
+  purchases.splice(parseInt(idx),1);
+  renderBuys(); updateStats();
+});
+$('buylist').addEventListener('input', e => {
+  const idx = e.target.dataset.buypaid;
+  if(idx===undefined) return;
+  purchases[parseInt(idx)].paid = parseFloat(e.target.value)||0;
+  updateStats();
+});
+
+function updateStats(){
+  saveDraft();
+  const counted = items.filter(i=>i.state!=='uncounted').length;
+  const sold = items.filter(i=>i.state==='sold');
+  const soldUnits = sold.reduce((s,i)=> s + ((i.data.qty||1) - i.remainQty), 0);
+  const rev = sold.reduce((s,i)=> s + i.soldTotal, 0);
+  const withCost = sold.filter(i => (i.data.cost||0) > 0);
+  const costBasis = withCost.reduce((s,i)=> s + (i.data.cost||0) * (((i.data.qty||1)-i.remainQty)/(i.data.qty||1)), 0);
+  const profit = withCost.reduce((s,i)=> s + i.soldTotal * (((i.data.qty||1)-i.remainQty)? 1:0), 0) - costBasis; // revenue from cost-tracked items minus their cost
+  const remainVal = items.reduce((s,i)=> s + perUnit(i.data) * i.remainQty, 0);
+  const spent = purchases.reduce((s,p)=>s+p.paid,0);
+  const net = rev - spent;
+  $('s-counted').textContent = `${counted} / ${items.length}`;
+  $('s-sold').textContent = soldUnits;
+  $('s-rev').textContent = money(rev);
+  $('s-spent').textContent = money(spent);
+  $('s-net').textContent = money(net);
+  $('s-net').style.color = net>=0 ? 'var(--green)' : 'var(--red)';
+  $('s-profit').textContent = withCost.length ? money(profit) + (withCost.length<sold.length?'*':'') : '—';
+  $('s-profit').style.color = profit>=0 ? 'var(--green)' : 'var(--red)';
+  $('s-remain').textContent = money(remainVal + purchases.reduce((s,p)=>s+p.ask*p.qty,0));
+  $('bar-found').style.width = (items.filter(i=>i.state==='found').length/items.length*100)+'%';
+  $('bar-sold').style.width = (sold.length/items.length*100)+'%';
+  const ready = sold.length>0 || purchases.length>0;
+  $('btn-csv').disabled = sold.length===0; $('btn-apply').disabled = !ready;
+  $('btn-csv2').disabled = counted===0 && purchases.length===0;
+  $('btn-csv3').disabled = counted===0 && purchases.length===0;
+}
+
+$('list').addEventListener('click', e => {
+  const row = e.target.closest('.item'); if(!row) return;
+  const it = items.find(i=>i.id===row.dataset.id); if(!it) return;
+  const act = e.target.dataset.act;
+  if(act==='minus'){ setRemain(it, it.remainQty-1); return; }
+  if(act==='plus'){ setRemain(it, it.remainQty+1); return; }
+  if(act==='price' || e.target.closest('[data-stop]')) return;
+  const st = e.target.dataset.setstate;
+  if(st){ setState(it, st); return; }
+  // tapping anywhere else on the row = quick "in case" toggle (never marks sold by accident)
+  setState(it, 'found');
+});
+$('list').addEventListener('input', e => {
+  if(e.target.dataset.act!=='price') return;
+  const it = items.find(i=>i.id===e.target.closest('.item').dataset.id);
+  it.soldTotal = parseFloat(e.target.value)||0;
+  updateStats(); // stats only — no re-render, so the input keeps focus
+});
+$('q').addEventListener('input', render);
+$('filter').addEventListener('change', render);
+
+function dl(name, rows){
+  const csv = rows.map(r => r.map(c => `"${String(c??'').replace(/"/g,'""')}"`).join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], {type:'text/csv'}));
+  a.download = name; a.click();
+}
+const today = new Date().toISOString().slice(0,10);
+
+$('btn-csv').onclick = () => {
+  const rows = [['Name','Set','Number','Condition','Language','Type','Qty Sold','Cost (item)','TCG Price','Asking','Sold Total','Profit vs Cost','Diff vs TCG']];
+  items.filter(i=>i.state==='sold').forEach(i => {
+    const d=i.data, q=d.qty||1, soldQty=q-i.remainQty;
+    const costShare = (d.cost||0)*(soldQty/q);
+    rows.push([d.name,d.set||'',d.number||'',d.condition||'',d.language||'',d.isSealed?'Sealed':'Single',
+      soldQty, d.cost?costShare.toFixed(2):'', (d.tcgPrice||0).toFixed(2), perUnit(d).toFixed(2),
+      i.soldTotal.toFixed(2), d.cost?(i.soldTotal-costShare).toFixed(2):'', (i.soldTotal-(d.tcgPrice||0)*soldQty).toFixed(2)]);
+  });
+  const rev = items.filter(i=>i.state==='sold').reduce((s,i)=>s+i.soldTotal,0);
+  rows.push([]); rows.push(['TOTAL SOLD','','','','','', items.filter(i=>i.state==='sold').reduce((s,i)=>s+((i.data.qty||1)-i.remainQty),0),'','','',rev.toFixed(2),'','']);
+  if(purchases.length){
+    rows.push([]); rows.push(['BOUGHT AT SHOW']);
+    rows.push(['Name','Set','Number','Condition','','','Qty','Paid (total)','','Asking (each)','','','']);
+    purchases.forEach(p => rows.push([p.name,p.set,p.number,p.condition,'','',p.qty,p.paid.toFixed(2),'',p.ask.toFixed(2),'','','']));
+    const spent = purchases.reduce((s,p)=>s+p.paid,0);
+    rows.push(['TOTAL BOUGHT','','','','','',purchases.reduce((s,p)=>s+p.qty,0),spent.toFixed(2),'','','','','']);
+    rows.push([]); rows.push(['NET CASH (sold − bought)','','','','','','','','','',(rev-spent).toFixed(2),'','']);
+  }
+  dl(`paragon-show-sold-${today}.csv`, rows);
+};
+
+$('btn-csv2').onclick = () => {
+  const rows = [['Name','Set','Number','Condition','Language','Type','Qty Remaining','TCG Price','Asking','Remaining Value']];
+  items.filter(i=>i.remainQty>0).forEach(i => {
+    const d=i.data;
+    rows.push([d.name,d.set||'',d.number||'',d.condition||'',d.language||'',d.isSealed?'Sealed':'Single',
+      i.remainQty,(d.tcgPrice||0).toFixed(2),perUnit(d).toFixed(2),(perUnit(d)*i.remainQty).toFixed(2)]);
+  });
+  purchases.forEach(p => {
+    rows.push([p.name,p.set,p.number,p.condition,'English',p.condition==='Sealed'?'Sealed':'Single',p.qty,'',p.ask.toFixed(2),(p.ask*p.qty).toFixed(2)]);
+  });
+  dl(`paragon-inventory-after-show-${today}.csv`, rows);
+};
+
+$('btn-csv3').onclick = () => {
+  const rows = [['Status','Name','Set','Number','Condition','Rarity/Type','Qty Before','Qty After','Qty Change','Ask (each)','TCG (each)','Value Before','Value After','Value Change','Sold For','Paid','Cash Effect']];
+  let vBefore=0, vAfter=0, revT=0, paidT=0;
+
+  // pre-show inventory: kept, sold, partial
+  items.forEach(i => {
+    const d=i.data, qb=d.qty||1, qa=i.remainQty, ask=perUnit(d);
+    const valB=ask*qb, valA=ask*qa;
+    vBefore+=valB; vAfter+=valA;
+    const soldFor = i.state==='sold' ? i.soldTotal : 0;
+    revT += soldFor;
+    const status = i.state==='sold' ? (qa>0?'Partial sale':'Sold') : i.state==='found' ? 'Kept' : 'Not counted';
+    rows.push([status, d.name||'', d.set||'', d.number||'', d.condition||'', d.rarity||(d.isSealed?'Sealed':''),
+      qb, qa, qa-qb, ask.toFixed(2), (d.tcgPrice||0).toFixed(2),
+      valB.toFixed(2), valA.toFixed(2), (valA-valB).toFixed(2),
+      soldFor?soldFor.toFixed(2):'', '', soldFor?soldFor.toFixed(2):'']);
+  });
+
+  // new purchases
+  purchases.forEach(p => {
+    const valA = p.ask*p.qty;
+    vAfter += valA; paidT += p.paid;
+    rows.push(['New purchase', p.name, p.set, p.number, p.condition, p.rarity||'',
+      0, p.qty, '+'+p.qty, p.ask.toFixed(2), (p.tcg||0).toFixed(2),
+      '0.00', valA.toFixed(2), '+'+valA.toFixed(2),
+      '', p.paid.toFixed(2), (-p.paid).toFixed(2)]);
+  });
+
+  rows.push([]);
+  rows.push(['TOTALS','','','','','','','','','','', vBefore.toFixed(2), vAfter.toFixed(2), (vAfter-vBefore).toFixed(2), revT.toFixed(2), paidT.toFixed(2), (revT-paidT).toFixed(2)]);
+  rows.push([]);
+  rows.push(['SUMMARY']);
+  rows.push(['Inventory value before show','', vBefore.toFixed(2)]);
+  rows.push(['Inventory value after show','', vAfter.toFixed(2)]);
+  rows.push(['Inventory value change','', (vAfter-vBefore).toFixed(2)]);
+  rows.push(['Show revenue (sold)','', revT.toFixed(2)]);
+  rows.push(['Spent buying','', paidT.toFixed(2)]);
+  rows.push(['Net cash from show','', (revT-paidT).toFixed(2)]);
+  rows.push(['Total show gain (net cash + inventory change)','', ((revT-paidT)+(vAfter-vBefore)).toFixed(2)]);
+  rows.push([]);
+  rows.push(['Note: values are based on your asking prices; TCG market shown per item for reference.']);
+  dl(`paragon-show-change-report-${today}.csv`, rows);
+};
+
+$('btn-apply').onclick = async () => {
+  const sold = items.filter(i=>i.state==='sold');
+  if(!confirm(`Record ${sold.length} sold item(s) and add ${purchases.length} purchased line(s) to your inventory system?\n\nSales get marked sold (today's date) and purchases get added as new inventory — your app and website update automatically. This can't be bulk-undone.`)) return;
+  $('btn-apply').disabled = true; $('btn-apply').textContent = 'Applying…';
+  try{
+    for(const it of sold){
+      const d = it.data, q = d.qty||1, soldQty = q - it.remainQty;
+      if(it.remainQty === 0){
+        await updateDoc(doc(db,'vendor',it.id), { soldPrice: it.soldTotal, soldAt: Date.now(), soldPlatform: 'Card Show' });
+      } else {
+        // partial: keep remaining qty on original, clone a sold record
+        await updateDoc(doc(db,'vendor',it.id), { qty: it.remainQty });
+        const clone = { ...d, qty: soldQty, soldPrice: it.soldTotal, soldAt: Date.now(), soldPlatform: 'Card Show' };
+        delete clone.id;
+        await addDoc(collection(db,'vendor'), clone);
+      }
+    }
+    for(const p of purchases){
+      await addDoc(collection(db,'vendor'), {
+        name: p.name, set: p.set, number: p.number,
+        condition: p.condition==='Sealed' ? 'NM' : p.condition,
+        isSealed: p.condition==='Sealed',
+        rarity: p.rarity || '',
+        qty: p.qty, cost: p.paid,
+        askingPrice: p.ask || null, tcgPrice: p.tcg || 0,
+        language: 'English', imageUrl: p.imageUrl || null,
+        notes: 'Bought at card show', addedAt: Date.now()
+      });
+    }
+    toast('✓ All recorded — your app and website are up to date.');
+    clearDraft();
+    $('btn-apply').textContent = 'Applied ✓';
+  }catch(e){
+    toast('Error: ' + e.message);
+    $('btn-apply').disabled = false; $('btn-apply').textContent = 'Apply sales to inventory system';
+  }
+};
+
+load();
+</script>
+</body>
+</html>

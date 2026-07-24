@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230D0D0F%22/%3E%3Cpath d=%22M16 6 L25 16 L16 26 L7 16 Z%22 fill=%22%23D4AF6A%22/%3E%3C/svg%3E">
+
+<script>
+/* ── ADMIN GATE ── change the passcode below, keep it out of screenshots ── */
+(function(){
+  var CODE = 'diamond-hands';   /* EDIT ME: pick your own passcode */
+  if (sessionStorage.getItem('pcAdminOK') === '1') return;
+  var e = prompt('Paragon Collectibles — admin passcode:');
+  if (e === CODE) { sessionStorage.setItem('pcAdminOK','1'); return; }
+  location.replace('https://paragoncollectiblesco.com');
+})();
+</script>
+
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PokéInventory — Identify Cards</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    body { background: #1a1a1a; color: white; min-height: 100vh; }
+
+    .id-header {
+      background: #E3350D;
+      padding: 0 20px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .id-header h1 { font-size: 16px; font-weight: 600; }
+
+    .step-bar {
+      background: #111;
+      padding: 8px 20px;
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid #333;
+    }
+    .step { flex:1; text-align:center; padding:8px 4px; font-size:12px; color:#666; border-bottom:2px solid transparent; }
+    .step.active { color:white; border-bottom-color:#E3350D; }
+    .step.done   { color:#2e7d32; border-bottom-color:#2e7d32; }
+
+    /* ── STEP 1 ── */
+    #step1 { padding: 24px; max-width: 900px; margin: 0 auto; }
+
+    .upload-area {
+      border: 2px dashed #444;
+      border-radius: 12px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      transition: all 0.15s;
+      margin-bottom: 20px;
+    }
+    .upload-area:hover { border-color: #E3350D; background: rgba(227,53,13,0.05); }
+    .upload-area input { position:absolute;inset:0;opacity:0;cursor:pointer; }
+    .upload-area .icon { font-size:48px; margin-bottom:12px; }
+    .upload-area p { color:#aaa; font-size:14px; }
+    .upload-area strong { color:#E3350D; }
+
+    /* Photo + canvas overlay container */
+    .photo-container {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+      cursor: crosshair;
+    }
+    .photo-container img {
+      display: block;
+      max-width: 100%;
+      max-height: 60vh;
+      object-fit: contain;
+    }
+    .photo-container canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      cursor: crosshair;
+    }
+
+    .photo-wrap {
+      text-align: center;
+      margin-bottom: 16px;
+      display: none;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .tool-btn {
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid #444;
+      background: #222;
+      color: white;
+      transition: all 0.15s;
+    }
+    .tool-btn:hover { background: #333; }
+    .tool-btn.active { background: #E3350D; border-color: #E3350D; }
+    .tool-btn.green  { background: #2e7d32; border-color: #2e7d32; }
+    .tool-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .box-count { font-size:13px; color:#aaa; margin-left:auto; }
+
+    /* Debug console */
+    #debug-console {
+      display: block;
+      background: #0a0a0a;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 12px;
+      max-height: 180px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 11px;
+      margin-bottom: 16px;
+    }
+    #debug-log div { margin-bottom: 2px; }
+    .d-ok  { color: #0f0; }
+    .d-err { color: #f44; }
+    .d-inf { color: #aaa; }
+
+    /* ── STEP 2 ── */
+    #step2 { display:none; padding:16px; max-width:1100px; margin:0 auto; padding-bottom:80px; }
+
+    .results-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px,1fr));
+      gap: 14px;
+    }
+
+    .result-card {
+      background: #222;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      transition: border-color 0.15s;
+    }
+    .result-card.approved { border-color: #2e7d32; }
+    .result-card.skipped  { border-color: #555; opacity: 0.5; }
+
+    .result-images {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: 130px;
+      background: #111;
+    }
+    .result-images img { width:100%;height:100%;object-fit:contain;padding:4px;display:block; }
+    .result-images .crop-img { object-fit:cover; }
+    .img-labels { display:grid;grid-template-columns:1fr 1fr; }
+    .img-label { font-size:10px;color:#555;padding:2px 8px;background:#1a1a1a;text-align:center;text-transform:uppercase;letter-spacing:0.5px; }
+
+    .result-body { padding:10px 12px; }
+    .conf-badge { font-size:11px;font-weight:600;padding:2px 7px;border-radius:10px;display:inline-block;margin-bottom:6px; }
+    .conf-scan { background:#1b5e20;color:#a5d6a7; }
+    .conf-ai   { background:#1a237e;color:#90caf9; }
+    .conf-none { background:#333;color:#888; }
+
+    .result-body input, .result-body select {
+      width:100%;padding:5px 8px;border:1px solid #444;border-radius:6px;
+      font-size:12px;background:#2a2a2a;color:white;margin-bottom:4px;outline:none;font-family:inherit;
+    }
+    .result-body input:focus, .result-body select:focus { border-color:#60a5fa; }
+    .result-row { display:grid;grid-template-columns:1fr 1fr;gap:4px; }
+
+    .result-price { font-size:16px;font-weight:700;color:#60a5fa;margin:6px 0; }
+    .result-actions { display:flex;gap:6px;margin-top:8px; }
+    .btn-approve { flex:1;background:#2e7d32;color:white;border:none;border-radius:7px;padding:7px;font-size:12px;font-weight:600;cursor:pointer; }
+    .btn-approve:hover { background:#1b5e20; }
+    .btn-skip { background:#333;color:#888;border:none;border-radius:7px;padding:7px 10px;font-size:12px;cursor:pointer; }
+    .btn-skip:hover { color:#ef5350; }
+    .approved-label { display:none;text-align:center;color:#2e7d32;font-weight:600;font-size:13px;padding:8px; }
+    .result-card.approved .approved-label { display:block; }
+    .result-card.approved .result-actions { display:none; }
+
+    .action-bar {
+      position:fixed;bottom:0;left:0;right:0;
+      background:#111;border-top:1px solid #333;
+      padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;z-index:10;
+    }
+    .action-bar-info { font-size:13px;color:#aaa; }
+
+    /* Processing */
+    .proc-overlay {
+      display:none;position:fixed;inset:0;background:rgba(0,0,0,0.8);
+      z-index:100;align-items:center;justify-content:center;flex-direction:column;gap:16px;
+    }
+    .proc-overlay.show { display:flex; }
+    .proc-spin { width:48px;height:48px;border:4px solid rgba(255,255,255,0.15);border-top-color:#E3350D;border-radius:50%;animation:spin 0.7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .proc-text { font-size:15px;color:white; }
+    .proc-sub  { font-size:13px;color:#888; }
+
+    .toast-d {
+      position:fixed;bottom:72px;left:50%;transform:translateX(-50%);
+      background:#333;color:white;padding:10px 20px;border-radius:20px;
+      font-size:13px;z-index:200;opacity:0;transition:opacity 0.2s;white-space:nowrap;
+    }
+    .toast-d.show { opacity:1; }
+  </style>
+</head>
+<body>
+
+<div class="id-header">
+  <h1 id="page-title">🔍 Identify Cards</h1>
+  <a href="index.html" id="back-link" style="color:white;font-size:13px;text-decoration:none">← Back to Lot</a>
+</div>
+
+<div class="step-bar">
+  <div class="step active" id="tab1">① Detect Cards</div>
+  <div class="step" id="tab2">② Review & Approve</div>
+</div>
+
+<!-- STEP 1 -->
+<div id="step1">
+
+  <!-- Upload area -->
+  <div class="upload-area" id="upload-area">
+    <input type="file" accept="image/*" onchange="handlePhoto(event)">
+    <div class="upload-icon">📸</div>
+    <p><strong>Upload a high-quality photo</strong> for best scan results</p>
+    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:400px;margin-left:auto;margin-right:auto;text-align:left">
+      <div style="font-size:12px;color:#0f0">✓ Original full-res photo</div>
+      <div style="font-size:12px;color:#0f0">✓ Good lighting, no glare</div>
+      <div style="font-size:12px;color:#0f0">✓ Cards face-up, flat</div>
+      <div style="font-size:12px;color:#0f0">✓ Fill the frame</div>
+      <div style="font-size:12px;color:#f44">✗ Don't use screenshots</div>
+      <div style="font-size:12px;color:#f44">✗ Avoid reflective sleeves</div>
+    </div>
+  </div>
+
+  <!-- OR use stored photo(s) -->
+  <div id="stored-photo-offer" style="display:none;text-align:center;margin-top:12px">
+    <p style="color:#666;font-size:13px">— or pick an existing lot photo —</p>
+    <div id="stored-photo-gallery" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:8px"></div>
+  </div>
+
+  <!-- Photo + canvas (shown after upload) -->
+  <div class="photo-wrap" id="photo-wrap">
+    <div class="photo-container" id="photo-container">
+      <img id="lot-img" src="" alt="Lot photo">
+      <canvas id="box-canvas"></canvas>
+    </div>
+  </div>
+
+  <div class="controls-row" id="controls-row" style="display:none">
+    <button class="tool-btn active" id="tool-select" onclick="setTool('select')">✋ Select</button>
+    <button class="tool-btn" id="tool-draw" onclick="setTool('draw')">➕ Draw Box</button>
+    <button class="tool-btn" onclick="autoDetect()" id="auto-btn">🤖 Auto-Detect</button>
+    <button class="tool-btn" onclick="clearBoxes()">🗑 Clear</button>
+    <div style="display:flex;gap:2px">
+      <button class="tool-btn" onclick="rotateImage(-90)" title="Rotate left 90°" style="padding:7px 10px">↺</button>
+      <button class="tool-btn" onclick="rotateImage(90)"  title="Rotate right 90°" style="padding:7px 10px">↻</button>
+    </div>
+    <button class="tool-btn" onclick="toggleDebug()" id="debug-btn">🪲 Debug</button>
+    <span class="box-count" id="box-count">0 cards</span>
+    <button class="tool-btn green" id="identify-btn" onclick="identifyAll()" disabled>Identify All →</button>
+  </div>
+
+  <div id="debug-console">
+    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+      <span style="color:#555;font-size:11px">Debug Console</span>
+      <button onclick="document.getElementById('debug-log').innerHTML=''" style="background:none;border:1px solid #333;color:#555;border-radius:4px;padding:1px 6px;cursor:pointer;font-size:10px">Clear</button>
+    </div>
+    <div id="debug-log"></div>
+  </div>
+
+  <p id="hint-text" style="color:#666;font-size:13px;text-align:center;display:none">
+    Right-click a box to delete it. Drag to move. Drag corner to resize.
+  </p>
+</div>
+
+<!-- STEP 2 -->
+<div id="step2">
+  <div class="results-grid" id="results-grid"></div>
+</div>
+
+<div class="action-bar" id="action-bar" style="display:none">
+  <div class="action-bar-info" id="action-info"></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#ccc;cursor:pointer;margin-right:8px">
+      <input type="checkbox" id="all-japanese" style="cursor:pointer"> 🇯🇵 All Japanese
+    </label>
+    <button class="tool-btn" onclick="goStep1()">← Redo</button>
+    <button class="tool-btn green" id="save-btn" onclick="saveApproved()">Save Approved →</button>
+  </div>
+</div>
+
+<div class="proc-overlay" id="proc">
+  <div class="proc-spin"></div>
+  <div class="proc-text" id="proc-text">Working…</div>
+  <div class="proc-sub"  id="proc-sub"></div>
+</div>
+
+<div class="toast-d" id="toast"></div>
+
+<script type="module">
+window.addEventListener('error', (e) => {
+  const log = document.getElementById('debug-log');
+  if (log) {
+    const d = document.createElement('div');
+    d.style.color = '#f44';
+    d.textContent = 'PAGE ERROR: ' + (e.message || e.error?.message || 'unknown') + ' @ ' + (e.filename||'').split('/').pop() + ':' + e.lineno;
+    log.appendChild(d);
+  }
+});
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, doc, updateDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD_8Q1x-2-WVYa5kGDT0Fj_VyuVjbS2UuU",
+  authDomain: "pokeinventory-3ee20.firebaseapp.com",
+  projectId: "pokeinventory-3ee20",
+  storageBucket: "pokeinventory-3ee20.firebasestorage.app",
+  messagingSenderId: "248123177716",
+  appId: "1:248123177716:web:6cdad358f21fcc99b7bca1"
+};
+const fbApp = initializeApp(firebaseConfig);
+const db    = getFirestore(fbApp);
+
+const params = new URLSearchParams(location.search);
+const lotId  = params.get('lot');
+const watchId = params.get('watch');
+const isWatch = !!watchId;
+let lot      = null;
+let tool     = 'select';
+let boxes    = [];
+let results  = [];
+let drawing  = false;
+let drawStart = null;
+let selectedBox = null;
+let dragging = false;
+let dragOff  = null;
+let resizing = false;
+let resizeStart = null;
+let photoLoaded = false;
+
+const imgEl  = document.getElementById('lot-img');
+const canvas = document.getElementById('box-canvas');
+const ctx    = canvas ? canvas.getContext('2d') : null;
+
+if (!canvas) {
+  console.error('box-canvas element not found!');
+  const log = document.getElementById('debug-log');
+  if (log) { const d=document.createElement('div'); d.style.color='#f44'; d.textContent='ERROR: canvas element missing'; log.appendChild(d); }
+}
+
+// ── LOAD LOT NAME ──────────────────────────────────────────────────────────
+async function init() {
+  const id = lotId || watchId;
+  if (!id) { dbg('No lot/watch ID in URL — open from a lot page', 'err'); return; }
+  const collection = isWatch ? 'watchlist' : 'lots';
+  dbg(`Loading ${collection} item ${id}…`, 'inf');
+  try {
+    const snap = await getDoc(doc(db, collection, id));
+    if (snap.exists()) {
+      lot = { id: snap.id, ...snap.data() };
+      document.getElementById('page-title').textContent = `🔍 ${lot.name}${isWatch?' (watchlist)':''}`;
+      document.getElementById('back-link').href = `index.html`;
+
+      // Collect all photos from every possible field
+      const photos = [];
+      if (Array.isArray(lot.images)) photos.push(...lot.images.filter(Boolean));
+      if (lot.image && !photos.includes(lot.image)) photos.unshift(lot.image);
+      if (Array.isArray(lot.photos)) lot.photos.filter(Boolean).forEach(p => { if(!photos.includes(p)) photos.push(p); });
+
+      dbg(`Lot loaded: "${lot.name}" — ${photos.length} stored photo(s)`, photos.length ? 'ok' : 'inf');
+
+      if (photos.length) {
+        const offer = document.getElementById('stored-photo-offer');
+        const gallery = document.getElementById('stored-photo-gallery');
+        gallery.innerHTML = photos.map((src, i) =>
+          `<img src="${src}" onclick="useStoredPhoto(${i})"
+                onerror="this.style.opacity=0.3;this.title='Failed to load'"
+                style="width:90px;height:90px;object-fit:cover;border-radius:8px;cursor:pointer;border:2px solid var(--gray-200,#ddd)"
+                onmouseover="this.style.borderColor='#e63946'"
+                onmouseout="this.style.borderColor='var(--gray-200,#ddd)'"
+                title="Use this photo">`
+        ).join('');
+        window._lotPhotos = photos;
+        if (offer) offer.style.display = 'block';
+        dbg(`Gallery built with ${photos.length} thumbnail(s) — click one to scan`, 'ok');
+      } else {
+        dbg('This lot has no stored photos — upload one to scan', 'inf');
+      }
+    } else {
+      dbg(`${collection} item not found in Firebase (id: ${id})`, 'err');
+    }
+  } catch(e) { dbg('Firebase load error: ' + e.message, 'err'); }
+}
+
+window.useStoredPhoto = (idx = 0) => {
+  const photos = window._lotPhotos || [];
+  const src = photos[idx] || lot?.image;
+  if (!src) return;
+  dbg(`Loading stored photo ${idx+1}/${photos.length} from Firebase…`, 'inf');
+  loadImageFromUrl(src, 'stored lot photo');
+};
+
+// ── PHOTO HANDLING ─────────────────────────────────────────────────────────
+window.handlePhoto = (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    // Auto-correct EXIF rotation before loading
+    fixExifRotation(e.target.result).then(fixed => {
+      loadImageFromUrl(fixed, 'uploaded photo');
+    });
+  };
+  reader.readAsDataURL(file);
+};
+
+// Read EXIF orientation and rotate the image to correct it
+async function fixExifRotation(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      // Get EXIF orientation from raw bytes
+      getExifOrientation(dataUrl, orientation => {
+        if (!orientation || orientation <= 1) { resolve(dataUrl); return; }
+        // Draw rotated onto canvas
+        const canvas2 = document.createElement('canvas');
+        const ctx2    = canvas2.getContext('2d');
+        // Swap width/height for 90/270 rotations
+        const swap = orientation >= 5 && orientation <= 8;
+        canvas2.width  = swap ? img.height : img.width;
+        canvas2.height = swap ? img.width  : img.height;
+        ctx2.save();
+        switch(orientation) {
+          case 2: ctx2.transform(-1,0,0,1,canvas2.width,0); break;
+          case 3: ctx2.transform(-1,0,0,-1,canvas2.width,canvas2.height); break;
+          case 4: ctx2.transform(1,0,0,-1,0,canvas2.height); break;
+          case 5: ctx2.transform(0,1,1,0,0,0); break;
+          case 6: ctx2.transform(0,1,-1,0,canvas2.height,0); break;
+          case 7: ctx2.transform(0,-1,-1,0,canvas2.height,canvas2.width); break;
+          case 8: ctx2.transform(0,-1,1,0,0,canvas2.width); break;
+        }
+        ctx2.drawImage(img, 0, 0);
+        ctx2.restore();
+        dbg(`Auto-rotated image (EXIF orientation: ${orientation})`, 'ok');
+        resolve(canvas2.toDataURL('image/jpeg', 0.92));
+      });
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+function getExifOrientation(dataUrl, callback) {
+  // Read raw JPEG bytes to find EXIF orientation tag
+  const base64 = dataUrl.split(',')[1];
+  const binary = atob(base64);
+  const bytes  = new Uint8Array(binary.length);
+  for (let i=0; i<binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  const view = new DataView(bytes.buffer);
+  if (view.getUint16(0, false) !== 0xFFD8) { callback(null); return; }
+  let offset = 2;
+  while (offset < view.byteLength) {
+    const marker = view.getUint16(offset, false);
+    offset += 2;
+    if (marker === 0xFFE1) { // APP1 - EXIF
+      const exifLen = view.getUint16(offset, false);
+      const exif = new DataView(bytes.buffer, offset + 2, exifLen - 2);
+      if (exif.getUint32(0, false) !== 0x45786966) { callback(null); return; } // "Exif"
+      const little = exif.getUint16(6, false) === 0x4949;
+      const tags   = exif.getUint16(14, little);
+      for (let i=0; i<tags; i++) {
+        const tag = exif.getUint16(16 + i*12, little);
+        if (tag === 0x0112) { callback(exif.getUint16(16 + i*12 + 8, little)); return; }
+      }
+      callback(null); return;
+    }
+    offset += view.getUint16(offset, false);
+  }
+  callback(null);
+}
+
+function loadImageFromUrl(src, label) {
+  dbg(`Loading image: ${label}`, 'inf');
+  imgEl.onload = () => {
+    dbg(`✓ Image loaded: ${imgEl.naturalWidth}×${imgEl.naturalHeight}px`, 'ok');
+    photoLoaded = true;
+    boxes = []; // clear boxes when new photo loaded
+    currentRotationDeg = 0; // reset rotation
+    document.getElementById('upload-area').style.display = 'none';
+    document.getElementById('stored-photo-offer').style.display = 'none';
+    document.getElementById('photo-wrap').style.display  = 'block';
+    document.getElementById('controls-row').style.display = 'flex';
+    document.getElementById('hint-text').style.display    = 'block';
+    // Show change photo button
+    let changeBtn = document.getElementById('change-photo-btn');
+    if (!changeBtn) {
+      changeBtn = document.createElement('label');
+      changeBtn.id = 'change-photo-btn';
+      changeBtn.style.cssText = 'display:inline-block;margin-bottom:10px;cursor:pointer;font-size:12px;color:#888;text-decoration:underline;';
+      changeBtn.innerHTML = '📷 Upload a different photo <input type="file" accept="image/*" style="display:none" onchange="handlePhoto(event)">';
+      document.getElementById('photo-wrap').insertAdjacentElement('beforebegin', changeBtn);
+    }
+    syncCanvas();
+  };
+  imgEl.onerror = () => {
+    dbg('ERROR: Image failed to load', 'err');
+    showToast('Photo failed to load — try uploading a fresh photo');
+  };
+  imgEl.src = src;
+}
+
+function syncCanvas() {
+  // Match canvas pixel size to the displayed img size
+  const rect = imgEl.getBoundingClientRect();
+  canvas.width  = rect.width  || imgEl.offsetWidth;
+  canvas.height = rect.height || imgEl.offsetHeight;
+  drawBoxes();
+}
+
+// ── DRAW BOXES ─────────────────────────────────────────────────────────────
+function drawBoxes() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  boxes.forEach((b, i) => {
+    const sel = selectedBox === b.id;
+    ctx.strokeStyle = sel ? '#facc15' : '#E3350D';
+    ctx.lineWidth   = sel ? 3 : 2;
+    ctx.strokeRect(b.x, b.y, b.w, b.h);
+    ctx.fillStyle   = sel ? 'rgba(250,204,21,0.1)' : 'rgba(227,53,13,0.08)';
+    ctx.fillRect(b.x, b.y, b.w, b.h);
+
+    // Label
+    const lbl = `Card ${i+1}`;
+    ctx.font = 'bold 12px sans-serif';
+    const tw = ctx.measureText(lbl).width;
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(b.x, b.y - 18, tw + 8, 18);
+    ctx.fillStyle = sel ? '#facc15' : 'white';
+    ctx.fillText(lbl, b.x + 4, b.y - 4);
+
+    // Resize handle
+    if (sel) {
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(b.x + b.w - 8, b.y + b.h - 8, 10, 10);
+    }
+  });
+  document.getElementById('box-count').textContent = `${boxes.length} card${boxes.length!==1?'s':''}`;
+  document.getElementById('identify-btn').disabled = boxes.length === 0;
+}
+
+// ── CANVAS EVENTS ──────────────────────────────────────────────────────────
+canvas.addEventListener('mousedown', e => {
+  const p = pos(e);
+  if (tool === 'draw') { drawing=true; drawStart=p; selectedBox=null; return; }
+  // Check resize handle
+  if (selectedBox) {
+    const b = boxes.find(b=>b.id===selectedBox);
+    if (b && p.x>=b.x+b.w-10 && p.x<=b.x+b.w+2 && p.y>=b.y+b.h-10 && p.y<=b.y+b.h+2) {
+      resizing=true; resizeStart={b,ox:p.x,oy:p.y,ow:b.w,oh:b.h}; return;
+    }
+  }
+  const hit = [...boxes].reverse().find(b=>p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h);
+  selectedBox = hit ? hit.id : null;
+  if (hit) { dragging=true; dragOff={dx:p.x-hit.x,dy:p.y-hit.y}; }
+  drawBoxes();
+});
+
+canvas.addEventListener('mousemove', e => {
+  const p = pos(e);
+  if (drawing && drawStart) {
+    drawBoxes();
+    ctx.strokeStyle='rgba(227,53,13,0.7)';ctx.lineWidth=2;ctx.setLineDash([5,3]);
+    ctx.strokeRect(drawStart.x,drawStart.y,p.x-drawStart.x,p.y-drawStart.y);
+    ctx.setLineDash([]);
+    return;
+  }
+  if (resizing && resizeStart) {
+    resizeStart.b.w = Math.max(30, resizeStart.ow+(p.x-resizeStart.ox));
+    resizeStart.b.h = Math.max(30, resizeStart.oh+(p.y-resizeStart.oy));
+    drawBoxes(); return;
+  }
+  if (dragging && selectedBox) {
+    const b=boxes.find(b=>b.id===selectedBox);
+    if(b){b.x=p.x-dragOff.dx;b.y=p.y-dragOff.dy;drawBoxes();}
+  }
+});
+
+canvas.addEventListener('mouseup', e => {
+  const p = pos(e);
+  if (drawing && drawStart) {
+    drawing=false;
+    const bx=Math.min(drawStart.x,p.x),by=Math.min(drawStart.y,p.y);
+    const bw=Math.abs(p.x-drawStart.x),bh=Math.abs(p.y-drawStart.y);
+    if(bw>20&&bh>20) boxes.push({id:Date.now(),x:bx,y:by,w:bw,h:bh});
+    drawStart=null; drawBoxes(); return;
+  }
+  dragging=false; resizing=false; resizeStart=null;
+});
+
+canvas.addEventListener('contextmenu', e => {
+  e.preventDefault();
+  const p=pos(e);
+  const hit=[...boxes].reverse().find(b=>p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h);
+  if(hit){boxes=boxes.filter(b=>b.id!==hit.id);selectedBox=null;drawBoxes();}
+});
+
+// Touch support
+canvas.addEventListener('touchstart',  e=>{e.preventDefault();canvas.dispatchEvent(new MouseEvent('mousedown',tm(e)));},{passive:false});
+canvas.addEventListener('touchmove',   e=>{e.preventDefault();canvas.dispatchEvent(new MouseEvent('mousemove', tm(e)));},{passive:false});
+canvas.addEventListener('touchend',    e=>{e.preventDefault();canvas.dispatchEvent(new MouseEvent('mouseup',   tm(e)));},{passive:false});
+function tm(e){const t=e.touches[0]||e.changedTouches[0];return{clientX:t.clientX,clientY:t.clientY};}
+function pos(e){const r=canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
+
+window.addEventListener('resize', ()=>{ if(photoLoaded) syncCanvas(); });
+
+// ── MANUAL ROTATION ────────────────────────────────────────────────────────
+let currentRotationDeg = 0;
+
+window.rotateImage = (deg) => {
+  if (!photoLoaded) return;
+  currentRotationDeg = (currentRotationDeg + deg + 360) % 360;
+
+  // Redraw the loaded image at new rotation into a canvas, update imgEl src
+  const tmp    = document.createElement('canvas');
+  const tmpCtx = tmp.getContext('2d');
+  const w = imgEl.naturalWidth, h = imgEl.naturalHeight;
+  const swap = currentRotationDeg === 90 || currentRotationDeg === 270;
+  tmp.width  = swap ? h : w;
+  tmp.height = swap ? w : h;
+  tmpCtx.save();
+  tmpCtx.translate(tmp.width/2, tmp.height/2);
+  tmpCtx.rotate((currentRotationDeg * Math.PI) / 180);
+  tmpCtx.drawImage(imgEl, -w/2, -h/2, w, h);
+  tmpCtx.restore();
+
+  const rotated = tmp.toDataURL('image/jpeg', 0.92);
+  boxes = []; // clear boxes — they no longer apply
+  imgEl.onload = () => { syncCanvas(); dbg(`Rotated ${deg > 0 ? 'right' : 'left'} → ${currentRotationDeg}°`, 'ok'); };
+  imgEl.src = rotated;
+  dbg(`Rotating image ${deg > 0 ? 'right' : 'left'} 90°…`, 'inf');
+};
+
+// ── TOOLS ──────────────────────────────────────────────────────────────────
+window.setTool = t => {
+  tool=t;
+  document.querySelectorAll('.tool-btn[id^="tool-"]').forEach(b=>b.classList.remove('active'));
+  document.getElementById(`tool-${t}`)?.classList.add('active');
+};
+
+window.clearBoxes = ()=>{ boxes=[]; selectedBox=null; drawBoxes(); };
+
+window.toggleDebug = ()=>{
+  const el=document.getElementById('debug-console');
+  const btn=document.getElementById('debug-btn');
+  const vis=el.style.display==='block';
+  el.style.display=vis?'none':'block';
+  btn.classList.toggle('active',!vis);
+};
+
+// ── DEBUG LOG ──────────────────────────────────────────────────────────────
+function dbg(msg, type='inf') {
+  console.log(msg);
+  const log=document.getElementById('debug-log');
+  const d=document.createElement('div');
+  d.className = type==='ok'?'d-ok':type==='err'?'d-err':'d-inf';
+  d.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  log.appendChild(d);
+  log.scrollTop=log.scrollHeight;
+}
+
+// ── AUTO-DETECT ─────────────────────────────────────────────────────────────
+window.autoDetect = async ()=>{
+  if(!photoLoaded){showToast('Upload a photo first');return;}
+  dbg('Auto-detect: asking Claude to find cards…','inf');
+  showProc('Claude is finding cards…','');
+
+  try {
+    const dataUrl = getFullImageDataUrl();
+    const base64  = dataUrl.split(',')[1];
+    const mime    = dataUrl.split(';')[0].split(':')[1]||'image/jpeg';
+    dbg(`Sending to Claude (${Math.round(base64.length/1024)}KB)…`,'inf');
+
+    const res = await fetch('/claude', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        max_tokens: 1000,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:mime,data:base64}},
+          {type:'text',text:'Look at this photo of Pokemon cards. Find every individual card visible and return bounding boxes as percentages. Return ONLY a JSON array: [{"x":5,"y":10,"w":20,"h":30},...] where x,y=top-left corner percent, w,h=size percent. Be generous with box size. If no cards visible return [].'}
+        ]}]
+      })
+    });
+
+    hideProc();
+
+    if(res.ok){
+      const data = await res.json();
+      const text = (data.content?.[0]?.text||'').trim();
+      dbg(`Claude: ${text.slice(0,200)}`,'ok');
+      let detected = [];
+      try{detected=JSON.parse(text);}
+      catch{const m=text.match(/\[[\s\S]*\]/);if(m)try{detected=JSON.parse(m[0]);}catch{}}
+
+      if(detected.length){
+        syncCanvas();
+        boxes=detected.map((d,i)=>({id:Date.now()+i,
+          x:Math.round((d.x/100)*canvas.width), y:Math.round((d.y/100)*canvas.height),
+          w:Math.round((d.w/100)*canvas.width), h:Math.round((d.h/100)*canvas.height)}));
+        drawBoxes();
+        dbg(`✓ Claude found ${boxes.length} cards`,'ok');
+        showToast(`✓ ${boxes.length} cards detected — adjust boxes then Identify All`);
+        return;
+      }
+    } else {
+      dbg(`Claude proxy returned ${res.status}`,'err');
+    }
+  } catch(e) {
+    hideProc();
+    dbg(`Claude error: ${e.message}`,'err');
+  }
+
+  // Fallback: grid
+  syncCanvas();
+  const W=canvas.width, H=canvas.height, aspect=W/H;
+  let cols=2,rows=2;
+  if(aspect>1.5){cols=3;rows=2;} else if(aspect>0.8){cols=2;rows=3;} else{cols=2;rows=4;}
+  const pad=0.02,cellW=(1-pad*(cols+1))/cols,cellH=(1-pad*(rows+1))/rows;
+  boxes=[];
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++)
+    boxes.push({id:Date.now()+r*cols+c,
+      x:Math.round((pad+c*(cellW+pad))*W), y:Math.round((pad+r*(cellH+pad))*H),
+      w:Math.round(cellW*W), h:Math.round(cellH*H)});
+  drawBoxes();
+  dbg(`Fallback: created ${boxes.length} grid boxes`,'inf');
+  showToast(`Created ${boxes.length} boxes — adjust to match your cards`);
+};
+
+function getFullImageDataUrl() {
+  const tmp=document.createElement('canvas');
+  tmp.width=imgEl.naturalWidth||imgEl.width;
+  tmp.height=imgEl.naturalHeight||imgEl.height;
+  tmp.getContext('2d').drawImage(imgEl,0,0,tmp.width,tmp.height);
+  return tmp.toDataURL('image/jpeg',0.9);
+}
+
+// ── IDENTIFY ALL ───────────────────────────────────────────────────────────
+window.identifyAll = async ()=>{
+  if(!boxes.length)return;
+  results=[];
+  dbg(`Starting identification of ${boxes.length} cards`,'inf');
+
+  for(let i=0;i<boxes.length;i++){
+    showProc(`Identifying card ${i+1} of ${boxes.length}…`,boxes[i].label||`Card ${i+1}`);
+    dbg(`--- Card ${i+1} ---`,'inf');
+    const cropUrl=cropBox(boxes[i]);
+    const result=await identifyCard(cropUrl,i);
+    results.push({...result,cropUrl,approved:false,skipped:false});
+    dbg(`Card ${i+1} result: ${result.name} | $${result.tcgPrice} | ${result.source}`,'ok');
+  }
+
+  hideProc();
+  goStep2();
+};
+
+function cropBox(b) {
+  const dispW=canvas.width, dispH=canvas.height;
+  const natW=imgEl.naturalWidth||dispW, natH=imgEl.naturalHeight||dispH;
+  const sx=natW/dispW, sy=natH/dispH;
+  const ox=Math.max(0,Math.round(b.x*sx)), oy=Math.max(0,Math.round(b.y*sy));
+  const ow=Math.max(10,Math.round(b.w*sx)), oh=Math.max(10,Math.round(b.h*sy));
+  const tmp=document.createElement('canvas');
+  tmp.width=ow;tmp.height=oh;
+  tmp.getContext('2d').drawImage(imgEl,ox,oy,ow,oh,0,0,ow,oh);
+  return tmp.toDataURL('image/jpeg',0.92);
+}
+
+async function identifyCard(cropUrl,idx) {
+  const base={name:'Unknown Card',set:'',number:'',rarity:'',condition:'NM',tcgPrice:0,priceIsLive:false,tcgUrl:null,imageUrl:null,source:'unknown',scanScore:null,matches:[]};
+
+  // Step 1: Try TCGTracking scan API first
+  dbg(`Card ${idx+1}: Scanning with TCGTracking…`,'inf');
+  try{
+    const comp=await compress(cropUrl,90000);
+    const res=await fetch('https://tcgtracking.com/tcgapi/v1/scan',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({game_id:3,limit:8,image:comp})
+    });
+    if(res.ok){
+      const d=await res.json();
+      dbg(`Scan API: success=${d.success} results=${d.results?.length} scores=${(d.results||[]).map(r=>r.score).join(',')}`,'inf');
+      if(d.success&&d.results?.length){
+        const allMatches=[];
+        for(const r of d.results.slice(0,5)){
+          const det=await fetchProduct(r.product_id);
+          if(det) allMatches.push({...det,scanScore:r.score});
+        }
+        if(allMatches.length){
+          dbg(`✓ Scan got ${allMatches.length} matches — best: ${allMatches[0].name} @${allMatches[0].scanScore}%`,'ok');
+          return{...base,...allMatches[0],source:'scan',matches:allMatches};
+        }
+      }
+    }
+  }catch(e){dbg(`Scan API error: ${e.message}`,'err');}
+
+  // Step 2: Claude vision via Netlify proxy (now works!)
+  dbg(`Card ${idx+1}: Trying Claude vision…`,'inf');
+  try{
+    const b64=cropUrl.split(',')[1];
+    const mime=cropUrl.split(';')[0].split(':')[1]||'image/jpeg';
+    const res=await fetch('/claude',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        max_tokens:500,
+        messages:[{role:'user',content:[
+          {type:'image',source:{type:'base64',media_type:mime,data:b64}},
+          {type:'text',text:`Identify this single Pokémon TCG card precisely.
+Return ONLY valid JSON (no markdown, no explanation):
+{"name":"English Pokémon name e.g. Charizard ex or Riolu","set":"full set name","number":"collector number e.g. 215/198","rarity":"Common/Uncommon/Rare/Holo Rare/Ultra Rare/Secret Rare/SIR/IR/Full Art/Alt Art","condition":"NM or LP or MP or HP","language":"English or Japanese"}
+
+IMPORTANT RULES:
+- ALWAYS give the English Pokémon name even for Japanese cards (e.g. Japanese ゲンガー → "Gengar"). TCGPlayer indexes Japanese cards under their English names.
+- Set the "language" field to "Japanese" if the card text is in Japanese characters, otherwise "English".
+- For Japanese cards, the set name is often the English translation of the Japanese set (e.g. "White Flare", "Crown Zenith"). Give your best English set name.
+- Read the collector number directly off the card (e.g. 121/086).
+- Be specific about rarity — SIR and IR are different cards.`}
+        ]}]
+      })
+    });
+    if(res.ok){
+      const d=await res.json();
+      const text=(d.content?.[0]?.text||'').trim();
+      dbg(`Claude response: ${text.slice(0,200)}`,'ok');
+      let parsed=null;
+      try{parsed=JSON.parse(text);}
+      catch{const m=text.match(/\{[\s\S]*?\}/);if(m)try{parsed=JSON.parse(m[0]);}catch{}}
+      if(parsed&&parsed.name){
+        dbg(`✓ Claude identified: ${parsed.name} | ${parsed.set} | #${parsed.number} | ${parsed.rarity}`,'ok');
+        const isJP = (parsed.language||'').toLowerCase().startsWith('japan');
+        dbg(`Language: ${parsed.language||'English'}${isJP?' 🇯🇵':''}`,'inf');
+        const price=await lookupPrice(parsed.name,parsed.set,parsed.number,isJP);
+        dbg(`Price lookup: ${price?'$'+price.price:'not found'}`,'inf');
+        return{...base,
+          name:isJP ? `${parsed.name} (JP)` : parsed.name,
+          set:parsed.set||'', number:parsed.number||'',
+          rarity:parsed.rarity||'', condition:parsed.condition||'NM',
+          language:parsed.language||'English',
+          tcgPrice:price?.price||0, priceIsLive:!!price,
+          tcgUrl:price?.tcgUrl||null, imageUrl:price?.imageUrl||null,
+          source:'ai'
+        };
+      }
+    } else {
+      const errText = await res.text();
+      dbg(`Claude error ${res.status}: ${errText.slice(0,100)}`,'err');
+    }
+  }catch(e){dbg(`Claude proxy error: ${e.message}`,'err');}
+
+  dbg(`Card ${idx+1}: Could not identify`,'err');
+  return base;
+}
+
+async function fetchProduct(productId){
+  try{
+    const r=await fetch(`https://tcgtracking.com/tcgapi/v1/products/${productId}`);
+    if(!r.ok)return null;
+    const d=await r.json();
+    const p=d.product||d,prices=d.prices||{};
+    let tcgPrice=null,tcgUrl=null,imageUrl=null;
+    if(prices.tcg){
+      const subs=Object.keys(prices.tcg);
+      const pref=['Holofoil','Normal','Reverse Holofoil','Foil'];
+      let ch=subs[0];for(const pr of pref){if(subs.includes(pr)){ch=pr;break;}}
+      tcgPrice=prices.tcg[ch]?.market??null;
+    }
+    tcgUrl=p.tcgplayer_url||null;
+    imageUrl=p.image_url||null;
+    // Clean up name — handles "Name - 123/456", "Name 123 456", "Name 123/456", "Name #123"
+    const cleaned = cleanCardName(p.clean_name || p.name || 'Unknown', p.number || '');
+    return{name:cleaned.name, set:p.set_name||'', number:cleaned.number,
+      tcgPrice:tcgPrice?parseFloat(tcgPrice):0,priceIsLive:!!tcgPrice,
+      tcgUrl,imageUrl,productId};
+  }catch{return null;}
+}
+
+async function lookupPrice(name, set, number, isJP){
+  try{
+    const searchName = (name||'').replace(/\bEx\b/g,'ex').replace(/\bEX\b/g,'ex').replace(/ \(JP\)$/,'').trim();
+    const numClean = number ? number.split('/')[0].replace(/^0+/,'') : '';
+    // For Japanese cards, append "Japanese" so TCGPlayer returns JP listings
+    const q = isJP ? `${searchName} Japanese` : searchName;
+
+    const res = await fetch(`/search?q=${encodeURIComponent(q)}${numClean?`&number=${encodeURIComponent(numClean)}`:''}`);
+    if(!res.ok){ dbg(`Search failed: ${res.status}`,'err'); return null; }
+    const data = await res.json();
+    const cards = data.data || [];
+    dbg(`Search "${q}": ${cards.length} results (${data.source||'tcgapi'})`,'inf');
+    if(!cards.length) return null;
+
+    // Match logic: for JP cards, prefer results whose set_name mentions Japanese
+    const normR = x => (x||'').toLowerCase()
+      .replace('special illustration rare','sir')
+      .replace('illustration rare','ir')
+      .replace('double rare','rr').trim();
+
+    let pool = cards;
+    if (isJP) {
+      const jp = cards.filter(c => /japanese|japan|\(jp\)/i.test(c.set_name||'') || /japanese/i.test(c.name||''));
+      if (jp.length) pool = jp;
+    } else {
+      // Prefer non-Japanese for English cards
+      const en = cards.filter(c => !/japanese|japan/i.test(c.set_name||''));
+      if (en.length) pool = en;
+    }
+
+    let best = null;
+    if (numClean) best = pool.find(c => (c.number||'').split('/')[0].replace(/^0+/,'') === numClean);
+    if (!best) best = pool.find(c => (c.name||'').toLowerCase() === searchName.toLowerCase());
+    if (!best && pool.length) best = pool[0];
+
+    if (best) {
+      let price = best.market_price ?? best.median_price ?? best.low_price ?? null;
+      if (price == null && numClean) {
+        const wp = pool.find(c => (c.number||'').split('/')[0].replace(/^0+/,'')===numClean && (c.market_price??c.low_price)!=null);
+        if (wp) { price = wp.market_price ?? wp.low_price; best = wp; }
+      }
+      if (price != null) {
+        dbg(`✓ Price: ${best.name} (${best.set_name}) = $${price}`,'ok');
+        return {
+          price: parseFloat(price),
+          tcgUrl: best.tcgplayer_id ? `https://www.tcgplayer.com/product/${best.tcgplayer_id}` : null,
+          imageUrl: best.image_url || null,
+          setName: best.set_name || ''
+        };
+      }
+    }
+    dbg(`No price match for ${name} #${number}`,'err');
+  }catch(e){ dbg('Price error: '+e.message,'err'); }
+  return null;
+}
+
+
+function compress(dataUrl,maxBytes){
+  return new Promise(res=>{
+    const img2=new Image();
+    img2.onload=()=>{
+      const c=document.createElement('canvas');
+      let w=img2.width,h=img2.height;
+      if(w>400||h>400){const r=Math.min(400/w,400/h);w=Math.round(w*r);h=Math.round(h*r);}
+      c.width=w;c.height=h;c.getContext('2d').drawImage(img2,0,0,w,h);
+      let q=0.85,result=c.toDataURL('image/jpeg',q);
+      while(result.length*0.75>maxBytes&&q>0.3){q-=0.1;result=c.toDataURL('image/jpeg',q);}
+      res(result);
+    };
+    img2.src=dataUrl;
+  });
+}
+
+// ── STEP 2 ─────────────────────────────────────────────────────────────────
+function goStep2(){
+  document.getElementById('step1').style.display='none';
+  document.getElementById('step2').style.display='block';
+  document.getElementById('action-bar').style.display='flex';
+  document.getElementById('tab1').className='step done';
+  document.getElementById('tab2').className='step active';
+  renderResults();
+}
+
+window.goStep1=()=>{
+  document.getElementById('step1').style.display='block';
+  document.getElementById('step2').style.display='none';
+  document.getElementById('action-bar').style.display='none';
+  document.getElementById('tab1').className='step active';
+  document.getElementById('tab2').className='step';
+};
+
+function renderResults(){
+  document.getElementById('results-grid').innerHTML=results.map((r,i)=>{
+    const conf=r.scanScore?`${r.scanScore}% scan match`:r.source==='ai'?'AI identified':'No match — fill manually';
+    const confCls=r.scanScore>=70?'conf-scan':r.scanScore?'conf-ai':'conf-none';
+
+    // Match picker — show up to 5 scan matches as selectable cards
+    const matchPicker = (r.matches&&r.matches.length>1) ? `
+      <div style="margin-bottom:8px">
+        <div style="font-size:11px;color:#888;margin-bottom:6px">📋 ${r.matches.length} possible matches — select the correct card:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          ${r.matches.map((m,mi)=>`
+            <div onclick="selectMatch(${i},${mi})" id="match-${i}-${mi}" style="
+              display:grid;grid-template-columns:36px 1fr auto;gap:8px;align-items:center;
+              padding:6px 8px;border-radius:6px;cursor:pointer;
+              border:2px solid ${mi===0?'#2e7d32':'#333'};
+              background:${mi===0?'rgba(46,125,50,0.15)':'#1a1a1a'};
+              transition:all 0.15s">
+              <img src="${m.imageUrl||''}" onerror="this.style.display='none'" style="width:36px;height:50px;object-fit:contain;border-radius:3px;background:#111">
+              <div>
+                <div style="font-size:12px;font-weight:600;color:white">${m.name}</div>
+                <div style="font-size:10px;color:#888">${m.set||''}${m.number?' · #'+m.number:''}</div>
+              </div>
+              <div style="font-size:12px;font-weight:700;color:#60a5fa;white-space:nowrap">$${(m.tcgPrice||0).toFixed(2)}</div>
+            </div>`).join('')}
+        </div>
+        <div style="font-size:10px;color:#666;margin-top:4px">Or edit fields below manually</div>
+      </div>` : '';
+
+    const tcgImg=r.imageUrl
+      ?`<img src="${r.imageUrl}" onerror="this.style.display='none'" alt="">`
+      :`<div style="display:flex;align-items:center;justify-content:center;height:100%;color:#444;font-size:12px">No art</div>`;
+
+    return`<div class="result-card ${r.approved?'approved':r.skipped?'skipped':''}" id="rc-${i}">
+      <div class="result-images">
+        <img class="crop-img" src="${r.cropUrl}" alt="crop">
+        ${tcgImg}
+      </div>
+      <div class="img-labels"><div class="img-label">Your photo</div><div class="img-label">TCGPlayer</div></div>
+      <div class="result-body">
+        <span class="conf-badge ${confCls}">${conf}</span>
+        ${matchPicker}
+        <input type="text"   id="rn-${i}" value="${r.name}"     placeholder="Card name">
+        <div class="result-row">
+          <input type="text" id="rs-${i}" value="${r.set||''}"  placeholder="Set">
+          <input type="text" id="ru-${i}" value="${r.number||''}" placeholder="#">
+        </div>
+        <div class="result-row">
+          <input type="text" id="rr-${i}" value="${r.rarity||''}" placeholder="Rarity">
+          <select id="rc-${i}" style="background:#2a2a2a;color:white">
+            <option ${r.condition==='NM'?'selected':''}>NM</option>
+            <option ${r.condition==='LP'?'selected':''}>LP</option>
+            <option ${r.condition==='MP'?'selected':''}>MP</option>
+            <option ${r.condition==='HP'?'selected':''}>HP</option>
+          </select>
+        </div>
+        <input type="number" id="rp-${i}" value="${r.tcgPrice||''}" placeholder="$0.00" step="0.01">
+        <div class="result-price" id="price-${i}">$${(r.tcgPrice||0).toFixed(2)} <span style="font-size:11px;color:#555">${r.priceIsLive?'✓ live':'est'}</span></div>
+        <div class="approved-label">✓ Approved</div>
+        <div class="result-actions">
+          <button class="btn-approve" onclick="approve(${i})">✓ Approve</button>
+          <button class="btn-skip"   onclick="skip(${i})">Skip</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  updateBar();
+}
+
+window.selectMatch=(cardIdx,matchIdx)=>{
+  const r=results[cardIdx];
+  if(!r||!r.matches)return;
+  const m=r.matches[matchIdx];
+  // Update result with selected match
+  results[cardIdx]={...results[cardIdx],...m,source:'scan'};
+  // Update fields
+  document.getElementById(`rn-${cardIdx}`).value=m.name||'';
+  document.getElementById(`rs-${cardIdx}`).value=m.set||'';
+  document.getElementById(`ru-${cardIdx}`).value=m.number||'';
+  document.getElementById(`rp-${cardIdx}`).value=m.tcgPrice||'';
+  document.getElementById(`price-${cardIdx}`).innerHTML=`$${(m.tcgPrice||0).toFixed(2)} <span style="font-size:11px;color:#0f0">✓ live</span>`;
+  // Update card art
+  const tcgImgEl=document.querySelector(`#rc-${cardIdx} .result-images img:last-child`);
+  if(tcgImgEl&&m.imageUrl) tcgImgEl.src=m.imageUrl;
+  // Highlight selected match
+  r.matches.forEach((_,mi)=>{
+    const el=document.getElementById(`match-${cardIdx}-${mi}`);
+    if(el){
+      el.style.borderColor=mi===matchIdx?'#2e7d32':'#333';
+      el.style.background=mi===matchIdx?'rgba(46,125,50,0.15)':'#1a1a1a';
+    }
+  });
+};
+
+window.approve=i=>{
+  results[i].name      = document.getElementById(`rn-${i}`).value.trim()||results[i].name;
+  results[i].set       = document.getElementById(`rs-${i}`).value.trim();
+  results[i].number    = document.getElementById(`ru-${i}`).value.trim();
+  results[i].rarity    = document.getElementById(`rr-${i}`).value.trim();
+  results[i].condition = document.getElementById(`rc-${i}`).value;
+  results[i].tcgPrice  = parseFloat(document.getElementById(`rp-${i}`).value)||results[i].tcgPrice;
+  results[i].approved=true; results[i].skipped=false;
+  document.getElementById(`rc-${i}`).className='result-card approved';
+  updateBar();
+};
+
+window.skip=i=>{
+  results[i].skipped=true; results[i].approved=false;
+  document.getElementById(`rc-${i}`).className='result-card skipped';
+  updateBar();
+};
+
+function updateBar(){
+  const n=results.filter(r=>r.approved).length;
+  document.getElementById('action-info').textContent=`${n} of ${results.length} cards approved`;
+  document.getElementById('save-btn').disabled=n===0;
+}
+
+function cleanCardName(rawName, existingNumber) {
+  let name = (rawName || '').trim();
+  let number = existingNumber || '';
+  let m = name.match(/^(.+?)[\s-–]+(\d{1,3})[\s\/]+(\d{1,3})\s*$/);
+  if (m) { return { name:m[1].trim(), number: number || `${m[2]}/${m[3]}` }; }
+  m = name.match(/^(.+?)\s*[-–]\s*(\d+\/\d+)(\s.*)?$/);
+  if (m) { return { name:m[1].trim(), number: number || m[2] }; }
+  m = name.match(/^(.+?)\s+#?(\d{1,3})\s*$/);
+  if (m && m[1].length > 2) { return { name:m[1].trim(), number: number || m[2] }; }
+  return { name, number };
+}
+
+window.saveApproved=async()=>{
+  const approved=results.filter(r=>r.approved);
+  if(!approved.length){showToast('No cards approved');return;}
+
+  showProc(`Fetching prices for ${approved.length} cards…`,'Running in parallel…');
+
+  // Helper: fetch price for one card
+  async function fetchOnePrice(r) {
+    const allJP = document.getElementById('all-japanese')?.checked;
+    const isJP = allJP || (r.language||'').toLowerCase().startsWith('japan') || / \(JP\)$/.test(r.name||'');
+    const cleaned = cleanCardName((r.name||'').replace(/ \(JP\)$/,''), r.number||'');
+    const name    = cleaned.name;
+    const number  = cleaned.number;
+    let tcgPrice=0, priceIsLive=false, tcgUrl=null, imageUrl=r.imageUrl||null;
+    let rarity=r.rarity||'', set=r.set||'';
+    try{
+      const sn=name.replace(/\bEx\b/g,'ex').replace(/\bEX\b/g,'ex').trim();
+      const q = isJP ? `${sn} Japanese` : sn;
+      const nc=number?number.split('/')[0].replace(/^0+/,''):'';
+      const setHint = isJP ? '' : (set||'');
+      const res=await fetch(`/search?q=${encodeURIComponent(q)}${number?`&number=${encodeURIComponent(number)}`:''}${setHint?`&set=${encodeURIComponent(setHint)}`:''}`);
+      if(res.ok){
+        const data=await res.json();
+        let cards=data.data||[];
+        // Filter to Japanese or English listings as appropriate
+        if (isJP) {
+          const jp = cards.filter(c=>/japanese|japan|\(jp\)/i.test(c.set_name||''));
+          if (jp.length) cards = jp;
+        } else {
+          const en = cards.filter(c=>!/japanese|japan/i.test(c.set_name||''));
+          if (en.length) cards = en;
+        }
+        const nr=x=>(x||'').toLowerCase().replace('special illustration rare','sir').replace('illustration rare','ir').replace('double rare','rr').trim();
+        const myR=nr(r.rarity);
+        let best=null;
+        if(nc&&myR) best=cards.find(c=>{const cn=(c.number||'').split('/')[0].replace(/^0+/,'');return cn===nc&&nr(c.rarity)===myR;});
+        if(!best&&nc) best=cards.find(c=>(c.number||'').split('/')[0].replace(/^0+/,'')===nc);
+        if(!best) best=cards.find(c=>(c.name||'').toLowerCase()===sn.toLowerCase());
+        if(!best&&cards.length) best=cards[0];
+        if(best){
+          let price=best.market_price??best.median_price??best.low_price??null;
+          if(price==null&&nc){const wp=cards.find(c=>(c.number||'').split('/')[0].replace(/^0+/,'')===nc&&(c.market_price??c.low_price)!=null);if(wp){price=wp.market_price??wp.low_price;best=wp;}}
+          if(best.image_url) imageUrl=best.image_url;
+          if(best.tcgplayer_id) tcgUrl=`https://www.tcgplayer.com/product/${best.tcgplayer_id}`;
+          if(best.rarity) rarity=best.rarity;
+          if(best.set_name) set=best.set_name;
+          if(price!=null){tcgPrice=parseFloat(price);priceIsLive=true;dbg(`✓ ${name}: $${tcgPrice}`,'ok');}
+          else dbg(`No price for ${name} #${number}`,'inf');
+        }
+      }
+    }catch(e){dbg(`${name}: ${e.message}`,'err');}
+    const displayName = isJP ? `${name} (JP)` : name;
+    return{name:displayName, set, number:number||'', rarity, condition:r.condition||'NM', language:isJP?'Japanese':'English', tcgPrice, priceIsLive, tcgUrl, imageUrl, scanScore:r.scanScore||null, qty:1};
+  }
+
+  // All prices in parallel — no more sequential timeout
+  const toAdd = await Promise.all(approved.map(r=>fetchOnePrice(r)));
+  dbg(`Priced ${toAdd.filter(c=>c.priceIsLive).length}/${toAdd.length} cards`,'ok');
+
+  showProc('Saving cards to lot…','');
+  try{
+    const coll = isWatch ? 'watchlist' : 'lots';
+    const targetId = lotId || watchId;
+    const snap=await getDoc(doc(db,coll,targetId));
+    const existing=snap.data()?.cards||[];
+    await updateDoc(doc(db,coll,targetId),{cards:[...existing,...toAdd]});
+    const pricedCount=toAdd.filter(c=>c.priceIsLive).length;
+    showToast(`✓ ${toAdd.length} cards saved (${pricedCount} with live prices)!`);
+    setTimeout(()=>{window.location.href='index.html';},1500);
+  }catch(e){
+    showToast('Save failed: '+e.message);
+    dbg('Save error: '+e.message,'err');
+  }finally{hideProc();}
+};
+
+// ── HELPERS ─────────────────────────────────────────────────────────────────
+function showProc(t,s){document.getElementById('proc-text').textContent=t;document.getElementById('proc-sub').textContent=s||'';document.getElementById('proc').classList.add('show');}
+function hideProc(){document.getElementById('proc').classList.remove('show');}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3000);}
+
+// Bulletproof init — runs after DOM ready, reports any error visibly
+function safeInit() {
+  try {
+    init();
+  } catch(e) {
+    const log = document.getElementById('debug-log');
+    if (log) {
+      const d = document.createElement('div');
+      d.style.color = '#f44';
+      d.textContent = 'INIT CRASH: ' + e.message;
+      log.appendChild(d);
+    }
+    console.error('init crash:', e);
+  }
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', safeInit);
+} else {
+  safeInit();
+}
+
+// Marker: module reached the end successfully
+console.log('✓ identify.html module loaded fully');
+window._identifyModuleLoaded = true;
+</script>
+
+<div style="text-align:center;padding:12px;font-size:11px;color:#555;border-top:1px solid #222;margin-top:32px">
+  PokéInventory · <strong>v3.17.3 · Built Jun 17 2026
+</div>
+</body>
+</html>

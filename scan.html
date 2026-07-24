@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230D0D0F%22/%3E%3Cpath d=%22M16 6 L25 16 L16 26 L7 16 Z%22 fill=%22%23D4AF6A%22/%3E%3C/svg%3E">
+
+<script>
+/* ── ADMIN GATE ── change the passcode below, keep it out of screenshots ── */
+(function(){
+  var CODE = 'diamond-hands';   /* EDIT ME: pick your own passcode */
+  if (sessionStorage.getItem('pcAdminOK') === '1') return;
+  var e = prompt('Paragon Collectibles — admin passcode:');
+  if (e === CODE) { sessionStorage.setItem('pcAdminOK','1'); return; }
+  location.replace('https://paragoncollectiblesco.com');
+})();
+</script>
+
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>PokéInventory — Scan</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --red: #E3350D; --red-dark: #c42d0d;
+      --green: #2e7d32; --green-light: #e8f5e9;
+      --blue: #1A6BB5; --blue-light: #e8f1fb;
+      --gray-100: #f5f5f5; --gray-200: #e8e8e8;
+      --gray-400: #aaa; --gray-600: #666; --gray-800: #222;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #111;
+      color: white;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── HEADER ── */
+    .scan-header {
+      background: var(--red);
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .scan-header h1 { font-size: 16px; font-weight: 600; }
+    .queue-count {
+      background: white;
+      color: var(--red);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 20px;
+    }
+
+    /* ── CAMERA ── */
+    .camera-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #camera-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    /* Card outline guide */
+    .card-guide {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      width: 62%;
+      aspect-ratio: 2.5/3.5;
+      border: 2px solid rgba(255,255,255,0.6);
+      border-radius: 8px;
+      pointer-events: none;
+    }
+
+    .card-guide::before, .card-guide::after {
+      content: '';
+      position: absolute;
+      width: 20px; height: 20px;
+      border-color: white;
+      border-style: solid;
+    }
+
+    .card-guide::before { top: -2px; left: -2px; border-width: 3px 0 0 3px; border-radius: 6px 0 0 0; }
+    .card-guide::after  { bottom: -2px; right: -2px; border-width: 0 3px 3px 0; border-radius: 0 0 6px 0; }
+
+    .guide-label {
+      position: absolute;
+      bottom: -28px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 12px;
+      color: rgba(255,255,255,0.7);
+      white-space: nowrap;
+    }
+
+    /* Flash effect */
+    .flash {
+      position: absolute;
+      inset: 0;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.1s;
+    }
+
+    .flash.go { opacity: 1; }
+
+    /* ── BOTTOM CONTROLS ── */
+    .controls {
+      background: #1a1a1a;
+      padding: 20px 24px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      gap: 16px;
+    }
+
+    .btn-capture {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      border: 4px solid white;
+      background: white;
+      cursor: pointer;
+      position: relative;
+      flex-shrink: 0;
+      transition: transform 0.1s;
+    }
+
+    .btn-capture:active { transform: scale(0.93); }
+
+    .btn-capture::after {
+      content: '';
+      position: absolute;
+      inset: 4px;
+      border-radius: 50%;
+      background: white;
+      border: 2px solid #ddd;
+    }
+
+    .btn-flip {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      font-size: 22px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-review {
+      background: var(--red);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      text-align: center;
+      line-height: 1.3;
+      min-width: 80px;
+    }
+
+    /* ── RECENT SCANS STRIP ── */
+    .recent-strip {
+      background: #1a1a1a;
+      border-top: 1px solid #333;
+      padding: 8px 12px;
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      flex-shrink: 0;
+      min-height: 64px;
+      align-items: center;
+    }
+
+    .recent-strip::-webkit-scrollbar { display: none; }
+
+    .recent-thumb {
+      width: 44px; height: 60px;
+      border-radius: 4px;
+      object-fit: cover;
+      border: 2px solid #333;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+
+    .recent-thumb.pending { border-color: #ffa000; }
+    .recent-thumb.identified { border-color: var(--green); }
+
+    .strip-empty {
+      font-size: 12px;
+      color: var(--gray-400);
+      padding: 4px 0;
+    }
+
+    /* ── PROCESSING OVERLAY ── */
+    .processing-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 50;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .processing-overlay.show { display: flex; }
+
+    .proc-spinner {
+      width: 48px; height: 48px;
+      border: 4px solid rgba(255,255,255,0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .proc-text { font-size: 14px; color: white; }
+
+    /* ── SUCCESS TOAST ── */
+    .scan-toast {
+      position: fixed;
+      top: 70px; left: 50%;
+      transform: translateX(-50%);
+      background: var(--green);
+      color: white;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 60;
+      opacity: 0;
+      transition: opacity 0.2s;
+      white-space: nowrap;
+    }
+
+    .scan-toast.show { opacity: 1; }
+
+    /* ── NO CAMERA ── */
+    .no-camera {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      gap: 16px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .no-camera .icon { font-size: 48px; }
+    .no-camera p { color: var(--gray-400); font-size: 14px; }
+
+    input[type=file] {
+      display: none;
+    }
+
+    .btn-upload-fallback {
+      background: var(--red);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 12px 24px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+<div class="scan-header">
+  <h1>📷 Scan Cards</h1>
+  <div style="display:flex;align-items:center;gap:10px">
+    <span class="queue-count"><span id="queue-num">0</span> in queue</span>
+    <a href="index.html" style="color:white;font-size:13px;text-decoration:none">← Review</a>
+  </div>
+</div>
+
+<div class="camera-wrap" id="camera-wrap">
+  <video id="camera-video" autoplay playsinline muted></video>
+  <div class="card-guide">
+    <span class="guide-label">Center card in frame</span>
+  </div>
+  <div class="flash" id="flash"></div>
+
+  <div class="no-camera" id="no-camera">
+    <div class="icon">📷</div>
+    <p>Camera not available. Upload a card photo instead.</p>
+    <button class="btn-upload-fallback" onclick="document.getElementById('file-fallback').click()">Upload Photo</button>
+    <input type="file" id="file-fallback" accept="image/*" onchange="handleFileFallback(event)">
+  </div>
+</div>
+
+<div class="recent-strip" id="recent-strip">
+  <span class="strip-empty">Scanned cards will appear here</span>
+</div>
+
+<div class="controls">
+  <button class="btn-flip" onclick="flipCamera()" title="Flip camera">🔄</button>
+  <button class="btn-capture" onclick="captureCard()" id="capture-btn"></button>
+  <button class="btn-review" onclick="window.location.href='index.html#queue'">
+    Review<br>Queue
+  </button>
+</div>
+
+<div class="processing-overlay" id="processing">
+  <div class="proc-spinner"></div>
+  <div class="proc-text" id="proc-text">Identifying card…</div>
+</div>
+
+<div class="scan-toast" id="scan-toast"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD_8Q1x-2-WVYa5kGDT0Fj_VyuVjbS2UuU",
+  authDomain: "pokeinventory-3ee20.firebaseapp.com",
+  projectId: "pokeinventory-3ee20",
+  storageBucket: "pokeinventory-3ee20.firebasestorage.app",
+  messagingSenderId: "248123177716",
+  appId: "1:248123177716:web:6cdad358f21fcc99b7bca1"
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+
+// ── CAMERA ─────────────────────────────────────────────────────────────────
+let stream = null;
+let facingMode = 'environment'; // rear camera
+let recentScans = [];
+let queueCount = 0;
+
+async function startCamera() {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    document.getElementById('camera-video').srcObject = stream;
+    document.getElementById('no-camera').style.display = 'none';
+  } catch (err) {
+    console.warn('Camera error:', err);
+    document.getElementById('camera-video').style.display = 'none';
+    document.getElementById('no-camera').style.display = 'flex';
+  }
+}
+
+window.flipCamera = async () => {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  if (stream) { stream.getTracks().forEach(t => t.stop()); }
+  await startCamera();
+};
+
+// ── CAPTURE ────────────────────────────────────────────────────────────────
+window.captureCard = async () => {
+  const video = document.getElementById('camera-video');
+  if (!video.srcObject) return;
+
+  // Flash effect
+  const flash = document.getElementById('flash');
+  flash.classList.add('go');
+  setTimeout(() => flash.classList.remove('go'), 150);
+
+  // Capture frame to canvas
+  const canvas = document.createElement('canvas');
+  canvas.width  = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+
+  // Crop to card guide area (center 62% width, 2.5:3.5 ratio)
+  const cropCanvas = document.createElement('canvas');
+  const cw = Math.round(canvas.width * 0.62);
+  const ch = Math.round(cw * (3.5 / 2.5));
+  const cx = Math.round((canvas.width - cw) / 2);
+  const cy = Math.round((canvas.height - ch) / 2);
+  cropCanvas.width  = cw;
+  cropCanvas.height = ch;
+  cropCanvas.getContext('2d').drawImage(canvas, cx, cy, cw, ch, 0, 0, cw, ch);
+
+  const dataUrl = cropCanvas.toDataURL('image/jpeg', 0.85);
+  await processCapture(dataUrl);
+};
+
+window.handleFileFallback = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async (e) => { await processCapture(e.target.result); };
+  reader.readAsDataURL(file);
+};
+
+async function processCapture(dataUrl) {
+  showProcessing('Scanning card…');
+
+  // Add to recent strip immediately as pending
+  addToStrip(dataUrl, 'pending');
+
+  try {
+    // Step 1: Try TCGTracking scan API
+    showProcessing('Matching against TCGPlayer database…');
+    const scanResult = await scanWithTCGTracking(dataUrl);
+
+    let card = {
+      imageDataUrl: dataUrl,
+      name: 'Unknown Card',
+      set: '',
+      number: '',
+      condition: 'NM',
+      tcgPrice: 0,
+      priceIsLive: false,
+      tcgUrl: null,
+      scanScore: null,
+      productId: null,
+      status: 'pending',
+      scannedAt: Date.now()
+    };
+
+    if (scanResult) {
+      showProcessing('Fetching card details + price…');
+      const details = await fetchProductDetails(scanResult.productId);
+      if (details) {
+        card = { ...card, ...details, scanScore: scanResult.score };
+      }
+    }
+
+    // Step 2: If scan failed or low confidence, use Claude
+    if (!scanResult || scanResult.score < 70) {
+      showProcessing('AI identifying card…');
+      const aiResult = await identifyWithClaude(dataUrl);
+      if (aiResult) {
+        card.name      = aiResult.name || card.name;
+        card.set       = aiResult.set  || card.set;
+        card.number    = aiResult.number || card.number;
+        card.condition = aiResult.condition || card.condition;
+        if (!card.priceIsLive) card.tcgPrice = aiResult.estimatedPrice || 0;
+      }
+    }
+
+    // Step 3: Save to Firebase queue
+    await addDoc(collection(db, 'scan_queue'), card);
+
+    updateStrip(dataUrl, 'identified');
+    showToast(`✓ ${card.name} added to queue`);
+
+  } catch (err) {
+    console.error('Capture error:', err);
+    // Save with just the image so user can review manually
+    await addDoc(collection(db, 'scan_queue'), {
+      imageDataUrl: dataUrl,
+      name: 'Unknown Card',
+      set: '', number: '', condition: 'NM',
+      tcgPrice: 0, priceIsLive: false,
+      status: 'pending', scannedAt: Date.now()
+    });
+    showToast('Added to queue — needs manual review');
+  } finally {
+    hideProcessing();
+  }
+}
+
+// ── TCG TRACKING SCAN ──────────────────────────────────────────────────────
+async function scanWithTCGTracking(dataUrl) {
+  const compressed = await compressImage(dataUrl, 90000);
+  try {
+    const res = await fetch('https://tcgtracking.com/tcgapi/v1/scan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ game_id: 3, limit: 5, image: compressed })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!data.success || !data.results?.length) return null;
+    const top = data.results[0];
+    return top.score >= 55 ? { productId: top.product_id, score: top.score } : null;
+  } catch { return null; }
+}
+
+async function fetchProductDetails(productId) {
+  try {
+    const res = await fetch(`https://tcgtracking.com/tcgapi/v1/products/${productId}`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const product = data.product || data;
+    const prices  = data.prices || {};
+    let tcgPrice = null, tcgUrl = null;
+    if (prices.tcg) {
+      const subtypes = Object.keys(prices.tcg);
+      const preferred = ['Normal','Holofoil','Reverse Holofoil','Foil'];
+      let chosen = subtypes[0];
+      for (const p of preferred) { if (subtypes.includes(p)) { chosen = p; break; } }
+      tcgPrice = prices.tcg[chosen]?.market ?? null;
+    }
+    if (product.tcgplayer_url) tcgUrl = product.tcgplayer_url;
+    return {
+      name: product.name || product.clean_name || 'Unknown',
+      set: product.set_name || '',
+      number: product.number || '',
+      tcgPrice: tcgPrice ? parseFloat(tcgPrice) : 0,
+      priceIsLive: tcgPrice != null,
+      tcgUrl, productId
+    };
+  } catch { return null; }
+}
+
+// ── CLAUDE FALLBACK ────────────────────────────────────────────────────────
+async function identifyWithClaude(dataUrl) {
+  const base64   = dataUrl.split(',')[1];
+  const mimeType = dataUrl.split(';')[0].split(':')[1];
+  try {
+    const res = await fetch('/claude', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 300,
+        messages: [{
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+            { type: 'text', text: 'Identify this single Pokémon card. Return ONLY JSON: {"name":"...","set":"...","number":"...","condition":"NM","estimatedPrice":0.00}' }
+          ]
+        }]
+      })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const text = (data.content[0]?.text || '').trim();
+    try { return JSON.parse(text); } catch {
+      const m = text.match(/\{[\s\S]*\}/);
+      return m ? JSON.parse(m[0]) : null;
+    }
+  } catch { return null; }
+}
+
+// ── IMAGE COMPRESSION ──────────────────────────────────────────────────────
+function compressImage(dataUrl, maxBytes) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let w = img.width, h = img.height;
+      const maxDim = 400;
+      if (w > maxDim || h > maxDim) {
+        const r = Math.min(maxDim/w, maxDim/h);
+        w = Math.round(w*r); h = Math.round(h*r);
+      }
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      let q = 0.85;
+      let result = canvas.toDataURL('image/jpeg', q);
+      while (result.length * 0.75 > maxBytes && q > 0.3) {
+        q -= 0.1;
+        result = canvas.toDataURL('image/jpeg', q);
+      }
+      resolve(result);
+    };
+    img.src = dataUrl;
+  });
+}
+
+// ── RECENT STRIP ───────────────────────────────────────────────────────────
+function addToStrip(dataUrl, status) {
+  recentScans.unshift({ dataUrl, status });
+  renderStrip();
+}
+
+function updateStrip(dataUrl, status) {
+  const item = recentScans.find(s => s.dataUrl === dataUrl);
+  if (item) item.status = status;
+  renderStrip();
+}
+
+function renderStrip() {
+  const strip = document.getElementById('recent-strip');
+  if (!recentScans.length) {
+    strip.innerHTML = '<span class="strip-empty">Scanned cards will appear here</span>';
+    return;
+  }
+  strip.innerHTML = recentScans.slice(0, 10).map(s =>
+    `<img class="recent-thumb ${s.status}" src="${s.dataUrl}" alt="scan">`
+  ).join('');
+}
+
+// ── QUEUE COUNT ────────────────────────────────────────────────────────────
+const q = query(collection(db, 'scan_queue'), orderBy('scannedAt', 'desc'));
+onSnapshot(q, snap => {
+  queueCount = snap.docs.filter(d => d.data().status === 'pending').length;
+  document.getElementById('queue-num').textContent = queueCount;
+});
+
+// ── UI HELPERS ─────────────────────────────────────────────────────────────
+function showProcessing(msg) {
+  document.getElementById('proc-text').textContent = msg;
+  document.getElementById('processing').classList.add('show');
+}
+
+function hideProcessing() {
+  document.getElementById('processing').classList.remove('show');
+}
+
+function showToast(msg) {
+  const t = document.getElementById('scan-toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+startCamera();
+</script>
+<div style="text-align:center;padding:16px;font-size:11px;color:#666;border-top:1px solid #333;margin-top:32px">PokéInventory · <strong>v1.8.0</strong> · Built Jun 16 2026</div>
+</body>
+</html>
