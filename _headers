@@ -1,0 +1,17 @@
+# Cloudflare Pages headers
+#
+# HTML and JS must revalidate on every load. Without this the browser happily
+# serves a cached index.html after a deploy, which looks exactly like a failed
+# push — the problem that made the version badge seem broken.
+/*.html
+  Cache-Control: no-cache, must-revalidate
+/
+  Cache-Control: no-cache, must-revalidate
+/js/*
+  Cache-Control: no-cache, must-revalidate
+/css/*
+  Cache-Control: no-cache, must-revalidate
+
+# The price database is large and changes rarely — let it cache.
+/data/*
+  Cache-Control: public, max-age=86400

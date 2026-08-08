@@ -1,0 +1,1350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230D0D0F%22/%3E%3Cpath d=%22M16 6 L25 16 L16 26 L7 16 Z%22 fill=%22%23D4AF6A%22/%3E%3C/svg%3E">
+
+<script>
+/* ── ADMIN GATE ── same passcode as the other back-of-house pages ── */
+(function(){
+  var CODE = 'diamond-hands';
+  // sessionStorage alone means re-typing the passcode every time the phone
+  // reclaims the tab. Remembering on a trusted device makes the home-screen
+  // icon usable at a show.
+  if (sessionStorage.getItem('pcAdminOK') === '1') return;
+  if (localStorage.getItem('pcAdminTrusted') === '1') { sessionStorage.setItem('pcAdminOK','1'); return; }
+  var e = prompt('Paragon Collectibles — admin passcode:');
+  if (e === CODE) {
+    sessionStorage.setItem('pcAdminOK','1');
+    if (confirm('Remember this device? Skips the passcode next time.\n\nOnly do this on your own phone or laptop.')) {
+      localStorage.setItem('pcAdminTrusted','1');
+    }
+    return;
+  }
+  location.replace('https://paragoncollectiblesco.com');
+})();
+</script>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PokéInventory — Point of Sale</title>
+<style>
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  :root {
+    --gold:#D4AF6A; --ink:#0D0D0F; --green:#2e7d32; --green-l:#e8f5e9;
+    --red:#c62828; --red-l:#ffebee; --blue:#1A6BB5; --blue-l:#e8f1fb;
+    --amber:#8a6d1f; --amber-l:#fdf6e3;
+    --g100:#f5f5f4; --g200:#e7e5e4; --g400:#a8a29e; --g600:#57534e; --g900:#1c1917;
+  }
+  body { font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+         color:var(--g900); background:var(--g100); padding-bottom:100px; }
+  header { background:var(--ink); color:#fff; padding:12px 16px; display:flex;
+           align-items:center; gap:12px; position:sticky; top:0; z-index:50; }
+  header h1 { font-size:16px; font-weight:600; flex:1; }
+  header a { color:var(--gold); text-decoration:none; font-size:13px; }
+  .tabs { display:flex; background:#fff; border-bottom:1px solid var(--g200);
+          position:sticky; top:49px; z-index:49; }
+  .tabs button { flex:1; padding:12px 6px; border:0; background:none; font:inherit;
+                 font-size:13px; color:var(--g600); border-bottom:2px solid transparent; }
+  .tabs button.on { color:var(--ink); border-bottom-color:var(--gold); font-weight:600; }
+  .page { display:none; padding:14px; } .page.on { display:block; }
+  .card { background:#fff; border:1px solid var(--g200); border-radius:10px;
+          padding:12px; margin-bottom:10px; }
+  .btn { padding:11px 16px; border-radius:8px; border:1px solid var(--g200);
+         background:#fff; font:inherit; font-size:14px; cursor:pointer; }
+  .btn:active { transform:scale(.98); }
+  .btn.p { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .btn.g { background:var(--green); color:#fff; border-color:var(--green); }
+  .btn.b { background:var(--blue); color:#fff; border-color:var(--blue); }
+  .btn.sm { padding:6px 10px; font-size:13px; }
+  .btn:disabled { opacity:.45; }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row.wrap { flex-wrap:wrap; }
+  input, select { padding:10px; border:1px solid var(--g200); border-radius:8px;
+                  font:inherit; font-size:16px; width:100%; }
+  label { font-size:12px; color:var(--g600); display:block; margin-bottom:4px; }
+  video { width:100%; border-radius:10px; background:#000; display:block; }
+  .scanbox { position:relative; }
+  .reticle { position:absolute; inset:18% 22%; border:2px solid var(--gold);
+             border-radius:12px; pointer-events:none; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; }
+  .pill.ok { background:var(--green-l); color:var(--green); }
+  .pill.no { background:var(--red-l); color:var(--red); }
+  .pill.w  { background:var(--amber-l); color:var(--amber); }
+  .muted { color:var(--g600); font-size:13px; }
+  .big { font-size:22px; font-weight:600; }
+  .line { display:flex; justify-content:space-between; align-items:center;
+          padding:9px 0; border-bottom:1px solid var(--g200); gap:8px; }
+  .line:last-child { border-bottom:0; }
+  .bar { position:fixed; left:0; right:0; bottom:0; background:#fff;
+         border-top:1px solid var(--g200); padding:10px 14px; z-index:60;
+         box-shadow:0 -2px 12px rgba(0,0,0,.06); }
+  .sheet { position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:200;
+           display:none; align-items:flex-end; }
+  .sheet.on { display:flex; }
+  .sheet > div { background:#fff; width:100%; border-radius:14px 14px 0 0;
+                 padding:16px; max-height:90vh; overflow:auto; }
+  .toast { position:fixed; left:50%; transform:translateX(-50%); bottom:96px;
+           background:var(--ink); color:#fff; padding:10px 16px; border-radius:8px;
+           font-size:14px; z-index:300; opacity:0; transition:opacity .2s; }
+  .toast.on { opacity:1; }
+  h3 { font-size:13px; text-transform:uppercase; letter-spacing:.04em;
+       color:var(--g400); margin:16px 0 8px; }
+  h3:first-child { margin-top:0; }
+  .ver-badge { display:inline-block; margin-left:8px; padding:1px 7px; border-radius:99px;
+               font-size:11px; font-weight:600; background:rgba(212,175,106,.18);
+               color:var(--gold); border:1px solid rgba(212,175,106,.35); vertical-align:middle; }
+</style>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0D0D0F">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Paragon">
+<link rel="apple-touch-icon" href="/icons/icon-180.png">
+</head>
+<body>
+
+<header>
+  <h1>Point of Sale <span id="app-version" class="ver-badge">v—</span></h1>
+  <span id="printer-pill" class="pill w">printer?</span>
+  <a href="index.html">Inventory</a>
+</header>
+
+<div class="tabs">
+  <button id="tab-scan"  class="on" onclick="showTab('scan')">Scan</button>
+  <button id="tab-cart"  onclick="showTab('cart')">Cart <span id="cart-count"></span></button>
+  <button id="tab-open"  onclick="showTab('open')">Trades <span id="open-count"></span></button>
+  <button id="tab-check" onclick="showTab('check')">Count <span id="check-count"></span></button>
+  <button id="tab-show"  onclick="showTab('show')">Show <span id="show-dot"></span></button>
+</div>
+
+<!-- ───────── SCAN ───────── -->
+<div id="page-scan" class="page on">
+  <div id="live-banner" style="display:none"></div>
+  <div class="card">
+    <div class="row" style="margin-bottom:10px">
+      <button class="btn p" id="cam-btn" onclick="toggleCamera()">Start camera</button>
+      <span id="cam-status" class="muted"></span>
+    </div>
+    <div class="scanbox" id="scanbox" style="display:none">
+      <video id="video" autoplay playsinline muted></video>
+      <div class="reticle"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <label>Tag ID or card name</label>
+    <div class="row">
+      <input id="manual" placeholder="PC-00042 · Charizard · binder x5"
+             onkeydown="if(event.key==='Enter') manualLookup()">
+      <button class="btn" onclick="manualLookup()">Find</button>
+    </div>
+    <div id="manual-results" style="margin-top:10px"></div>
+  </div>
+
+  <div id="recent"></div>
+</div>
+
+<!-- ───────── CART ───────── -->
+<div id="page-cart" class="page">
+  <div id="cart-body"></div>
+</div>
+
+<!-- ───────── OPEN TRADES ───────── -->
+<div id="page-open" class="page">
+  <div id="open-body"></div>
+</div>
+
+<!-- ───────── SHOW ───────── -->
+<div id="page-show" class="page">
+  <div id="show-body"></div>
+</div>
+
+<!-- ───────── CHECK-IN ───────── -->
+<div id="page-check" class="page">
+  <div id="check-body"></div>
+</div>
+
+<div class="bar" id="bar" style="display:none">
+  <div class="row" style="justify-content:space-between;margin-bottom:8px">
+    <span class="muted"><span id="bar-count">0</span> cards</span>
+    <span class="big" id="bar-total">$0.00</span>
+  </div>
+  <div class="row">
+    <button class="btn" onclick="cancelCart()" title="Empty the cart">✕</button>
+    <button class="btn g" style="flex:1" onclick="openCheckout('sale')">Sell</button>
+    <button class="btn b" style="flex:1" onclick="openCheckout('trade')">Trade</button>
+  </div>
+</div>
+
+<!-- checkout sheet -->
+<div class="sheet" id="sheet-checkout" onclick="if(event.target===this) closeSheet('checkout')">
+  <div>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <strong id="co-title">Sell</strong>
+      <button class="btn sm" onclick="closeSheet('checkout')">Close</button>
+    </div>
+    <div id="co-lines"></div>
+    <h3>Price</h3>
+    <div class="row wrap" style="margin-bottom:10px">
+      <button class="btn sm" onclick="coFull()">Full price</button>
+      <button class="btn sm" onclick="coPct(0.9)">90%</button>
+      <button class="btn sm" onclick="coPct(0.8)">80%</button>
+    </div>
+    <label>Total ($)</label>
+    <input id="co-total" type="number" step="0.01" inputmode="decimal" oninput="coRender()">
+    <div id="co-summary" style="margin-top:12px"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="btn" style="flex:1" onclick="cancelCheckout()">Cancel</button>
+      <button class="btn p" style="flex:2" id="co-confirm" onclick="confirmCheckout()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- intake sheet -->
+<div class="sheet" id="sheet-intake" onclick="if(event.target===this) closeSheet('intake')">
+  <div>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <strong>Cards taken in</strong>
+      <button class="btn sm" onclick="closeSheet('intake')">Close</button>
+    </div>
+    <div id="in-context" class="muted" style="margin-bottom:10px"></div>
+    <label>Search — add a number or ", set" to narrow</label>
+    <div class="row">
+      <input id="in-q" placeholder="charmander 04/208"
+             onkeydown="if(event.key==='Enter') intakeSearch()">
+      <button class="btn" onclick="intakeSearch()">Search</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;text-transform:none;letter-spacing:0">
+      <input type="checkbox" id="in-jp" style="width:auto" onchange="intakeSearch()"> 🇯🇵 Japanese cards
+    </label>
+    <div id="in-results" style="margin-top:10px"></div>
+    <h3>Added</h3>
+    <div id="in-list"></div>
+    <div class="muted" style="margin-top:6px;font-size:12px">* estimated — that grade isn't priced in the database</div>
+    <div id="in-summary" style="margin-top:10px"></div>
+    <button class="btn g" style="width:100%;margin-top:14px" onclick="closeTrade()">
+      Close trade &amp; add to inventory
+    </button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-missing" onclick="if(event.target===this) closeSheet('missing')">
+  <div>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <strong>Never scanned</strong>
+      <button class="btn sm" onclick="closeSheet('missing')">Close</button>
+    </div>
+    <div class="muted" style="margin-bottom:10px">
+      These are in inventory but weren't in the case. Either they sold without being
+      recorded, or they're genuinely missing.
+    </div>
+    <div id="missing-list"></div>
+  </div>
+</div>
+
+<div class="sheet" id="sheet-buy" onclick="if(event.target===this) closeSheet('buy')">
+  <div>
+    <div class="row" style="justify-content:space-between;margin-bottom:12px">
+      <strong>Cards bought at the show</strong>
+      <button class="btn sm" onclick="closeSheet('buy')">Close</button>
+    </div>
+    <div class="muted" style="margin-bottom:10px">
+      Enter what you actually paid — that becomes the cost basis, and the show
+      report can't tell you how you did without it.
+    </div>
+    <label>Search — add a number or ", set" to narrow</label>
+    <div class="row">
+      <input id="buy-q" placeholder="charmander, paldean fates" onkeydown="if(event.key==='Enter') buySearch()">
+      <button class="btn" onclick="buySearch()">Search</button>
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;margin-top:8px;font-size:13px;text-transform:none;letter-spacing:0">
+      <input type="checkbox" id="buy-jp" style="width:auto" onchange="buySearch()"> 🇯🇵 Japanese cards
+    </label>
+    <div id="buy-results" style="margin-top:10px"></div>
+    <h3>To add</h3>
+    <div id="buy-list"></div>
+    <div id="buy-summary" style="margin-top:10px"></div>
+    <button class="btn g" style="width:100%;margin-top:14px" onclick="saveBuyIn()">
+      Add to inventory
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="js/version.js?v=3.67.0"></script>
+<script src="js/pricedb.js?v=3.67.0"></script>
+<script src="js/labels.js?v=3.67.0"></script>
+<script src="js/jsQR.js?v=3.67.0"></script>
+<script src="js/pos.js?v=3.67.0"></script>
+<script src="js/showreport.js?v=3.67.0"></script>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteField, onSnapshot, query, orderBy }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD_8Q1x-2-WVYa5kGDT0Fj_VyuVjbS2UuU",
+  authDomain: "pokeinventory-3ee20.firebaseapp.com",
+  projectId: "pokeinventory-3ee20",
+  storageBucket: "pokeinventory-3ee20.firebasestorage.app",
+  messagingSenderId: "248123177716",
+  appId: "1:248123177716:web:6cdad358f21fcc99b7bca1"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+
+/* ── state ── */
+let vendorCards = [];
+let openTrades  = [];
+let allTx       = [];
+let events      = [];
+let cart        = [];
+let coType      = 'sale';
+let intakeTrade = null;
+let intakeCards = [];
+let scanMode    = 'cart';     // 'cart' at the table, 'check' when counting
+let session     = null;       // in-progress check-in
+
+const money   = c => POS.money(c);
+const byTag   = t => vendorCards.find(c => (c.tagId || '').toUpperCase() === String(t || '').toUpperCase());
+const unsold  = () => vendorCards.filter(c => !c.soldPrice && !c.exitType && !c.archived);
+
+onSnapshot(collection(db, 'vendor'), snap => {
+  vendorCards = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderCart(); renderOpen(); renderCheck(); renderShow(); renderLiveBanner();
+});
+onSnapshot(query(collection(db, 'events'), orderBy('date', 'asc')), snap => {
+  events = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderShow(); renderLiveBanner();
+});
+onSnapshot(collection(db, 'transactions'), snap => {
+  allTx = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+                   .sort((a, b) => (b.at || 0) - (a.at || 0));
+  openTrades = allTx.filter(t => t.status === 'open');
+  renderOpen();
+});
+
+/* ── ui plumbing ── */
+window.showTab = t => {
+  scanMode = t === 'check' ? 'check' : 'cart';
+  for (const k of ['scan', 'cart', 'open', 'check', 'show']) {
+    document.getElementById('page-' + k).classList.toggle('on', k === t);
+    document.getElementById('tab-' + k).classList.toggle('on', k === t);
+  }
+  document.getElementById('bar').style.display =
+    (t !== 'check' && cart.length) ? 'block' : 'none';
+  if (t === 'check') renderCheck();
+  if (t === 'show') renderShow();
+};
+window.closeSheet = k => document.getElementById('sheet-' + k).classList.remove('on');
+const openSheet = k => document.getElementById('sheet-' + k).classList.add('on');
+let toastT;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200);
+}
+
+/* ── camera / QR ── */
+let stream = null, scanning = false, detector = null, jsQRfn = null, lastHit = 0;
+
+async function ensureDecoder() {
+  if (detector || jsQRfn) return;
+  // Safari has no BarcodeDetector, so jsQR does the work there. It is bundled
+  // locally rather than pulled from a CDN — a show venue's wifi is exactly
+  // where a third-party script fails to load, and a scanner that needs the
+  // internet to start is no scanner at all.
+  if ('BarcodeDetector' in window) {
+    try {
+      const fmts = await BarcodeDetector.getSupportedFormats();
+      if (fmts.includes('qr_code')) { detector = new BarcodeDetector({ formats: ['qr_code'] }); return; }
+    } catch (e) { /* fall through */ }
+  }
+  if (window.jsQR) { jsQRfn = window.jsQR; return; }
+  throw new Error('QR decoder missing — hard-refresh the page (Ctrl+F5 / pull down to reload)');
+}
+
+window.toggleCamera = async () => {
+  if (stream) { stopCamera(); return; }
+  const st = document.getElementById('cam-status');
+  st.textContent = 'starting…';
+  try {
+    await ensureDecoder();
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 } }, audio: false
+    });
+    const v = document.getElementById('video');
+    v.srcObject = stream;
+    document.getElementById('scanbox').style.display = 'block';
+    document.getElementById('cam-btn').textContent = 'Stop camera';
+    st.textContent = detector ? 'native scanner' : 'jsQR scanner';
+    scanning = true; requestAnimationFrame(tick);
+  } catch (e) {
+    st.textContent = '';
+    const msg = /denied|NotAllowed/i.test(e.name + e.message)
+      ? 'Camera permission denied — allow camera access for this site in Settings'
+      : /NotFound|NotReadable/i.test(e.name)
+        ? 'No camera available'
+        : e.message;
+    toast(msg);
+    stopCamera();
+  }
+};
+function stopCamera() {
+  scanning = false;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = null;
+  document.getElementById('scanbox').style.display = 'none';
+  document.getElementById('cam-btn').textContent = 'Start camera';
+  document.getElementById('cam-status').textContent = '';
+}
+const cv = document.createElement('canvas');
+async function tick() {
+  if (!scanning) return;
+  const v = document.getElementById('video');
+  if (v.readyState === 4) {
+    let text = null;
+    try {
+      if (detector) {
+        const hits = await detector.detect(v);
+        if (hits.length) text = hits[0].rawValue;
+      } else if (jsQRfn) {
+        cv.width = v.videoWidth; cv.height = v.videoHeight;
+        const g = cv.getContext('2d', { willReadFrequently: true });
+        g.drawImage(v, 0, 0);
+        const d = g.getImageData(0, 0, cv.width, cv.height);
+        const r = jsQRfn(d.data, d.width, d.height);
+        if (r) text = r.data;
+      }
+    } catch (e) { /* frame skipped */ }
+    if (text && Date.now() - lastHit > 900) { lastHit = Date.now(); onScan(text.trim()); }
+  }
+  requestAnimationFrame(tick);
+}
+
+function onScan(text) {
+  // Accept a bare tag or a URL ending in one.
+  const m = /(PC-\d+)/i.exec(text) || /(\d{4,6})\s*$/.exec(text);
+  const tag = m ? m[1].toUpperCase() : text.toUpperCase();
+  const card = byTag(tag) || byTag('PC-' + tag.replace(/\D/g, '').padStart(5, '0'));
+  if (!card) { toast('No card with tag ' + tag); navigator.vibrate && navigator.vibrate(60); return; }
+  if (scanMode === 'check') checkIn(card); else addToCart(card, 1);
+}
+
+/* ── cart ── */
+function addToCart(card, units) {
+  if (card.soldPrice || card.exitType) { toast(card.name + ' is already gone'); return; }
+  const existing = cart.find(c => c.id === card.id);
+
+  if (POS.isBulk(card)) {
+    const stock = POS.stockOf(card);
+    const inCart = existing ? POS.unitsOf(existing) : 0;
+    if (inCart >= stock) { toast('Only ' + stock + ' left in ' + card.name); return; }
+
+    // A scan means one more card. A manual add without a count means the
+    // quantity is the whole point of looking it up — so ask.
+    let add = parseInt(units, 10) || 0;
+    if (!add) {
+      if (scanMode === 'check' || arguments.length > 1) add = 1;
+      else {
+        const answer = prompt(`How many from "${card.name}"?  (${stock - inCart} available)`, '1');
+        if (answer == null) return;
+        add = parseInt(answer, 10) || 0;
+        if (add <= 0) return;
+      }
+    }
+    add = Math.min(add, stock - inCart);
+    if (existing) existing.units = inCart + add;
+    else cart.push({ ...card, units: add });
+    navigator.vibrate && navigator.vibrate(30);
+    toast('+ ' + card.name + ' ×' + (inCart + add) + '  ' + money(POS.listedCents(card) * (inCart + add)));
+    renderCart();
+    return;
+  }
+
+  if (existing) { toast('Already in cart'); return; }
+  cart.push({ ...card, units: 1 });
+  navigator.vibrate && navigator.vibrate(30);
+  toast('+ ' + card.name + '  ' + money(POS.listedCents(card)));
+  renderCart();
+}
+
+window.setUnits = (id, n) => {
+  const e = cart.find(c => c.id === id); if (!e) return;
+  const max = POS.stockOf(e);
+  const v = Math.max(0, Math.min(max, parseInt(n, 10) || 0));
+  if (v === 0) { cart = cart.filter(c => c.id !== id); }
+  else e.units = v;
+  renderCart();
+};
+window.removeFromCart = id => { cart = cart.filter(c => c.id !== id); renderCart(); };
+window.clearCart = () => { cart = []; renderCart(); };
+
+function cardLine(c, action) {
+  return `<div class="line">
+    <div style="min-width:0">
+      <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</div>
+      <div class="muted">${esc(c.set || '')} ${c.number ? '#' + esc(c.number) : ''} · ${esc(c.condition || 'NM')}</div>
+    </div>
+    <div style="text-align:right;white-space:nowrap">
+      <div style="font-weight:600">${money(POS.listedCents(c) * POS.unitsOf(c))}${POS.unitsOf(c) > 1 ? `<span class="muted" style="font-weight:400"> (${POS.unitsOf(c)} × ${money(POS.listedCents(c))})</span>` : ''}</div>
+      ${action || ''}
+    </div></div>`;
+}
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m]));
+
+function renderCart() {
+  // Refresh each entry from live data — prices and stock change while the cart
+  // is open — but keep the unit count, which belongs to the cart, not the card.
+  cart = cart.map(c => {
+    const fresh = vendorCards.find(v => v.id === c.id);
+    return fresh ? { ...fresh, units: POS.unitsOf(c) } : c;
+  });
+  const n = cart.length;
+  document.getElementById('cart-count').textContent = n ? '(' + n + ')' : '';
+  document.getElementById('bar').style.display = n ? 'block' : 'none';
+  const total = cart.reduce((s, c) => s + POS.listedCents(c) * POS.unitsOf(c), 0);
+  document.getElementById('bar-count').textContent = cart.reduce((s, c) => s + POS.unitsOf(c), 0);
+  document.getElementById('bar-total').textContent = money(total);
+
+  document.getElementById('cart-body').innerHTML = !n
+    ? `<div class="card muted">Cart is empty. Scan a tag to start a transaction.</div>`
+    : `<div class="card">${cart.map(c => cardLine(c, POS.isBulk(c)
+        ? `<div class="row" style="justify-content:flex-end;gap:4px;margin-top:4px">
+             <button class="btn sm" onclick="setUnits('${c.id}', ${POS.unitsOf(c) - 1})">−</button>
+             <span style="min-width:26px;text-align:center;font-weight:600">${POS.unitsOf(c)}</span>
+             <button class="btn sm" onclick="setUnits('${c.id}', ${POS.unitsOf(c) + 1})">+</button>
+           </div>`
+        : `<button class="btn sm" onclick="removeFromCart('${c.id}')">Remove</button>`)).join('')}</div>
+       <div class="row"><button class="btn" style="flex:1" onclick="clearCart()">Clear cart</button></div>`;
+}
+
+/* ── manual lookup ── */
+window.manualLookup = () => {
+  let q = document.getElementById('manual').value.trim();
+  if (!q) return;
+  const el = document.getElementById('manual-results');
+
+  // "binder x5" or "PC-00042 x5" — typing the count beats hunting for the
+  // stepper on another tab, which is what you'd be doing mid-transaction.
+  let units = 0;
+  const mult = /\s*[x×*]\s*(\d{1,3})\s*$/i.exec(q);
+  if (mult) { units = parseInt(mult[1], 10); q = q.slice(0, mult.index).trim(); }
+
+  const direct = byTag(q) || byTag('PC-' + q.replace(/\D/g, '').padStart(5, '0'));
+  if (direct) { addToCart(direct, units); document.getElementById('manual').value = ''; el.innerHTML = ''; return; }
+  const hits = unsold().filter(c => (c.name || '').toLowerCase().includes(q.toLowerCase())).slice(0, 12);
+  el.innerHTML = hits.length
+    ? `<div class="card">${hits.map(c => cardLine(c, POS.isBulk(c)
+        ? `<div class="row" style="justify-content:flex-end;gap:4px;margin-top:4px">
+             <input type="number" min="1" max="${POS.stockOf(c)}" value="1" id="mq-${c.id}"
+                    style="width:60px;padding:6px;font-size:14px;text-align:center">
+             <button class="btn sm" onclick="pickCard('${c.id}', parseInt(document.getElementById('mq-${c.id}').value,10)||1)">Add</button>
+           </div>`
+        : `<button class="btn sm" onclick="pickCard('${c.id}')">Add</button>`)).join('')}</div>`
+    : `<span class="pill no">nothing matched</span>`;
+};
+window.pickCard = (id, units) => {
+  const c = vendorCards.find(v => v.id === id);
+  if (c) addToCart(c, units || 0);
+  document.getElementById('manual').value = '';
+  document.getElementById('manual-results').innerHTML = '';
+};
+
+/* ── checkout ── */
+window.openCheckout = type => {
+  if (!cart.length) return;
+  coType = type;
+  document.getElementById('co-title').textContent = type === 'sale' ? 'Sell' : 'Trade out';
+  document.getElementById('co-confirm').textContent = type === 'sale' ? 'Confirm sale' : 'Open trade';
+  document.getElementById('co-lines').innerHTML =
+    `<div class="card" style="margin:0">${cart.map(c => cardLine(c)).join('')}</div>`;
+  coFull();
+  openSheet('checkout');
+};
+const cartListed = () => cart.reduce((s, c) => s + POS.listedCents(c) * POS.unitsOf(c), 0);
+window.coFull = () => { document.getElementById('co-total').value = (cartListed() / 100).toFixed(2); coRender(); };
+window.coPct = p => { document.getElementById('co-total').value = (Math.round(cartListed() * p) / 100).toFixed(2); coRender(); };
+
+window.coRender = () => {
+  const total = parseFloat(document.getElementById('co-total').value);
+  const flat = POS.expandCart(cart);
+  const s = coType === 'sale'
+    ? POS.saleSummary(flat, isNaN(total) ? null : total)
+    : POS.tradeSummary(flat, [], { total: isNaN(total) ? null : total });
+  const pct = s.pctOfAsk;
+  const cls = pct == null ? 'w' : pct >= 95 ? 'ok' : pct >= 80 ? 'w' : 'no';
+  const agreed = coType === 'sale' ? s.totalCents : s.outTotalCents;
+  document.getElementById('co-summary').innerHTML = `
+    <div class="line"><span class="muted">Listed</span><span>${money(s.listedCents)}</span></div>
+    <div class="line"><span class="muted">Agreed</span><span class="big">${money(agreed)}</span></div>
+    <div class="line"><span class="muted">Of asking</span><span class="pill ${cls}">${pct == null ? '—' : pct + '%'}</span></div>
+    ${coType === 'trade'
+      ? `<div class="muted" style="margin-top:8px">Trade opens with ${cart.length} card${cart.length===1?'':'s'} out.
+         Add what you took in whenever you get to it — credit is ${Math.round(POS.CREDIT_RATE*100)}% of market.</div>`
+      : ''}`;
+};
+
+window.confirmCheckout = async () => {
+  const total = parseFloat(document.getElementById('co-total').value);
+  if (isNaN(total) || total < 0) { toast('Enter a total'); return; }
+  const btn = document.getElementById('co-confirm');
+  btn.disabled = true;
+  try {
+    const flat = POS.expandCart(cart);
+    const s = coType === 'sale'
+      ? POS.saleSummary(flat, total)
+      : POS.tradeSummary(flat, [], { total });
+    const grouped = POS.groupLines(coType === 'sale' ? s.lines : s.outLines);
+    const tx = {
+      at: Date.now(),
+      type: coType,
+      status: coType === 'sale' ? 'closed' : 'open',
+      out: grouped.map(g => ({ cardId: g.cardId, name: g.name, units: g.units,
+                               listed: g.listedCents / 100, value: g.allocatedCents / 100 })),
+      in: [],
+      outTotal: (coType === 'sale' ? s.totalCents : s.outTotalCents) / 100,
+      inCredit: 0,
+      cashDelta: s.cashDeltaCents / 100,
+      pctOfAsk: s.pctOfAsk,
+      rate: POS.CREDIT_RATE
+    };
+    const ref = await addDoc(collection(db, 'transactions'), tx);
+
+    await Promise.all(grouped.map(g => {
+      const card = vendorCards.find(c => c.id === g.cardId) || {};
+      const value = g.allocatedCents / 100;
+      if (POS.isBulk(card)) {
+        // Selling three out of twenty leaves seventeen, so the record stays in
+        // inventory. But the three that left still have to appear in the sales
+        // record — otherwise partial bulk sales are invisible and their revenue
+        // never counts. Write a separate exited record for the units sold.
+        const left = Math.max(0, POS.stockOf(card) - g.units);
+        const unitPrice = Math.round((value / g.units) * 100) / 100;
+        return Promise.all([
+          updateDoc(doc(db, 'vendor', g.cardId), { qty: left, lastSoldAt: tx.at }),
+          addDoc(collection(db, 'vendor'), {
+            name: card.name, set: card.set || 'Bulk', number: card.number || '',
+            condition: card.condition || 'NM',
+            qty: g.units, bulk: true, bulkSaleOf: g.cardId,
+            tcgPrice: card.tcgPrice || unitPrice,
+            askingPrice: card.askingPrice || unitPrice,
+            exitType: coType, exitAt: tx.at, exitValue: value, txId: ref.id,
+            ...(coType === 'sale' ? { soldPrice: value, soldAt: tx.at } : {}),
+            addedAt: card.addedAt || tx.at
+          })
+        ]);
+      }
+      return updateDoc(doc(db, 'vendor', g.cardId), {
+        exitType: coType, exitAt: tx.at, exitValue: value, txId: ref.id,
+        // soldPrice stays the cash-sale field so existing stats keep working
+        ...(coType === 'sale' ? { soldPrice: value, soldAt: tx.at } : {})
+      });
+    }));
+    cart = [];
+    closeSheet('checkout');
+    renderCart();
+    toast(coType === 'sale' ? 'Sale recorded' : 'Trade opened — add intake later');
+    if (coType === 'trade') showTab('open');
+  } catch (e) {
+    toast('Save failed: ' + e.message);
+  } finally { btn.disabled = false; }
+};
+
+/* ── CHECK-IN ──
+ * Scan everything physically in the case. The valuable output is the inverse:
+ * inventory that never got scanned either sold without being recorded or is
+ * missing. The session survives a reload because counting a case takes a while
+ * and phones lock, sleep and die halfway through.
+ */
+const SESSION_KEY = 'pcCheckin';
+
+function loadSession() {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    const o = JSON.parse(raw);
+    return { id: o.id, startedAt: o.startedAt, seen: new Set(o.seen || []), restored: new Set(o.restored || []) };
+  } catch (e) { return null; }
+}
+function saveSession() {
+  if (!session) { localStorage.removeItem(SESSION_KEY); return; }
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      id: session.id, startedAt: session.startedAt,
+      seen: [...session.seen], restored: [...session.restored]
+    }));
+  } catch (e) { /* private mode — session just won't survive a reload */ }
+}
+session = loadSession();
+
+window.startCheckin = () => {
+  session = { id: 'chk-' + Date.now(), startedAt: Date.now(), seen: new Set(), restored: new Set() };
+  saveSession(); renderCheck();
+  toast('Check-in started — scan the case');
+};
+window.abandonCheckin = () => {
+  if (!confirm('Discard this count? Scans already recorded stay on the cards.')) return;
+  session = null; saveSession(); renderCheck();
+};
+
+async function checkIn(card) {
+  if (!session) { toast('Start a check-in first'); return; }
+  if (session.seen.has(card.id)) { toast('Already counted'); return; }
+
+  const wasOut = !!(card.soldPrice || card.exitType);
+  session.seen.add(card.id);
+  if (wasOut) session.restored.add(card.id);
+  saveSession();
+  navigator.vibrate && navigator.vibrate(wasOut ? [40, 60, 40] : 30);
+
+  try {
+    const patch = { lastSeenAt: Date.now(), lastSeenSession: session.id };
+    if (wasOut) {
+      // Scanned a card the books say is gone — it's physically here, so it isn't.
+      Object.assign(patch, {
+        soldPrice: deleteField(), soldAt: deleteField(), exitType: deleteField(),
+        exitAt: deleteField(), exitValue: deleteField(), txId: deleteField()
+      });
+    }
+    await updateDoc(doc(db, 'vendor', card.id), patch);
+    toast(wasOut ? '↩︎ ' + card.name + ' back in inventory' : '✓ ' + card.name);
+  } catch (e) { toast('Save failed: ' + e.message); }
+  renderCheck();
+}
+
+const expectedCards = () => vendorCards.filter(c => !c.soldPrice && !c.exitType && !c.archived);
+const missingCards  = () => expectedCards().filter(c => !session || !session.seen.has(c.id));
+
+function renderCheck() {
+  const el = document.getElementById('check-body');
+  if (!el) return;
+
+  if (!session) {
+    const n = expectedCards().length;
+    document.getElementById('check-count').textContent = '';
+    el.innerHTML = `
+      <div class="card">
+        <h3 style="margin-top:0">Post-show count</h3>
+        <p class="muted" style="margin-bottom:12px">
+          Scan every card in the case. ${n} card${n === 1 ? '' : 's'} are currently in inventory.
+          Anything you don't scan gets flagged at the end.
+        </p>
+        <button class="btn p" style="width:100%" onclick="startCheckin()">Start check-in</button>
+      </div>`;
+    return;
+  }
+
+  const expected = expectedCards().length;
+  const seenLive = expectedCards().filter(c => session.seen.has(c.id)).length;
+  const missing  = expected - seenLive;
+  const restored = session.restored.size;
+  const pct = expected > 0 ? Math.round((seenLive / expected) * 100) : 0;
+
+  document.getElementById('check-count').textContent = '(' + seenLive + ')';
+  el.innerHTML = `
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <span class="muted">Started ${new Date(session.startedAt).toLocaleString()}</span>
+        <button class="btn sm" onclick="abandonCheckin()">Discard</button>
+      </div>
+      <div style="margin:14px 0;text-align:center">
+        <div class="big" style="font-size:34px">${seenLive} / ${expected}</div>
+        <div class="muted">${pct}% of inventory counted</div>
+      </div>
+      <div style="height:8px;background:var(--g200);border-radius:99px;overflow:hidden">
+        <div style="height:100%;width:${pct}%;background:var(--green);transition:width .25s"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="line"><span class="muted">Counted</span><span class="pill ok">${seenLive}</span></div>
+      <div class="line"><span class="muted">Not yet scanned</span><span class="pill ${missing ? 'w' : 'ok'}">${missing}</span></div>
+      ${restored ? `<div class="line"><span class="muted">Returned to inventory</span><span class="pill ok">${restored}</span></div>` : ''}
+    </div>
+
+    <div class="card">
+      <button class="btn" style="width:100%;margin-bottom:8px" onclick="reviewMissing()">
+        Review ${missing} not scanned
+      </button>
+      <button class="btn" style="width:100%;margin-bottom:8px" onclick="openBuyIn()">
+        + Add cards I bought at the show
+      </button>
+      <button class="btn g" style="width:100%" onclick="finishCheckin()">Finish count</button>
+    </div>
+
+    <div class="card muted">
+      Go to the <strong>Scan</strong> tab and start the camera — scans land here while
+      Check-in is the active tab.
+    </div>`;
+}
+
+window.reviewMissing = () => {
+  const miss = missingCards();
+  document.getElementById('missing-list').innerHTML = !miss.length
+    ? '<span class="pill ok">Everything accounted for</span>'
+    : `<div class="card" style="margin:0">${miss.map(c => `
+        <div class="line">
+          <div style="min-width:0">
+            <div style="font-weight:600">${esc(c.name)}</div>
+            <div class="muted">${esc(c.set || '')} ${c.number ? '#' + esc(c.number) : ''} · ${c.tagId || 'no tag'}</div>
+          </div>
+          <div class="row" style="white-space:nowrap">
+            <span>${money(POS.listedCents(c))}</span>
+            <button class="btn sm" onclick="markMissingSold('${c.id}')">Sold</button>
+            <button class="btn sm" onclick="countManually('${c.id}')">It's here</button>
+          </div>
+        </div>`).join('')}</div>`;
+  openSheet('missing');
+};
+
+/* A tag can be scuffed or peeled off — counting by hand must stay possible. */
+window.countManually = async id => {
+  const c = vendorCards.find(v => v.id === id);
+  if (c) await checkIn(c);
+  reviewMissing();
+};
+
+window.markMissingSold = async id => {
+  const c = vendorCards.find(v => v.id === id);
+  if (!c) return;
+  const suggested = (POS.listedCents(c) / 100).toFixed(2);
+  const entered = prompt(`Sold "${c.name}" for how much?`, suggested);
+  if (entered == null) return;
+  const price = parseFloat(entered);
+  if (isNaN(price) || price < 0) { toast('Not a valid price'); return; }
+  try {
+    await updateDoc(doc(db, 'vendor', id), {
+      soldPrice: price, soldAt: Date.now(),
+      exitType: 'sale', exitAt: Date.now(), exitValue: price,
+      reconciledIn: session ? session.id : null
+    });
+    toast('Recorded ' + money(POS.toCents(price)));
+  } catch (e) { toast('Save failed: ' + e.message); }
+  reviewMissing(); renderCheck();
+};
+
+window.finishCheckin = () => {
+  const miss = missingCards();
+  const seenLive = expectedCards().filter(c => session.seen.has(c.id)).length;
+  if (miss.length && !confirm(
+      `${miss.length} card(s) were never scanned. Finish anyway?\n\n` +
+      `They stay in inventory and keep their old "last seen" date, so you can find them later.`)) {
+    reviewMissing(); return;
+  }
+  const restored = session.restored.size;
+  session = null; saveSession(); renderCheck();
+  toast(`Count finished — ${seenLive} counted${restored ? ', ' + restored + ' returned' : ''}`);
+};
+
+/* ── search results ──
+ * Same renderer for trade intake and show buy-ins: thumbnail, set, number,
+ * price, and a set filter once the list gets long. A hundred Charmanders is
+ * only a problem if you can't see which one you're holding.
+ */
+let hitState = { cards: [], filter: '', target: null, addFn: '' };
+
+window.filterHits = v => { hitState.filter = v; paintHits(); };
+
+function paintHits() {
+  const el = document.getElementById(hitState.target);
+  const all = hitState.cards;
+  if (!all.length) { el.innerHTML = '<span class="pill no">nothing found</span>'; return; }
+
+  const sets = POS.setsIn(all);
+  const shown = hitState.filter ? all.filter(c => (c.set_name || '') === hitState.filter) : all;
+
+  const picker = sets.length > 1 ? `
+    <select onchange="filterHits(this.value)" style="margin-bottom:8px">
+      <option value="">All sets (${all.length})</option>
+      ${sets.map(([name, n]) => `<option value="${esc(name)}" ${hitState.filter === name ? 'selected' : ''}>${esc(name)} (${n})</option>`).join('')}
+    </select>` : '';
+
+  el.innerHTML = picker + `<div class="card" style="margin:0">${shown.map((c, i) => {
+    const idx = all.indexOf(c);
+    return `<div class="line">
+      <div class="row" style="min-width:0;gap:10px">
+        ${c.image_url
+          ? `<img src="${esc(c.image_url)}" loading="lazy" style="width:44px;height:61px;object-fit:contain;border-radius:4px;background:var(--g100)" onerror="this.style.visibility='hidden'">`
+          : `<div style="width:44px;height:61px;background:var(--g100);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--g400)">🃏</div>`}
+        <div style="min-width:0">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${esc(c.name)}</div>
+          <div class="muted">${c._jp ? '🇯🇵 ' : ''}${esc(c.set_name || '')}</div>
+          <div class="muted">${c.number ? '#' + esc(c.number) : ''}${c.printing ? ' · ' + esc(c.printing) : ''}</div>
+        </div>
+      </div>
+      <div style="text-align:right;white-space:nowrap">
+        <div style="font-weight:600">${c.market_price != null ? '$' + Number(c.market_price).toFixed(2) : '—'}</div>
+        <button class="btn sm" onclick="${hitState.addFn}(${idx})">Add</button>
+      </div>
+    </div>`;
+  }).join('')}</div>` +
+  (shown.length < all.length ? `<div class="muted" style="margin-top:6px">${shown.length} of ${all.length} shown</div>` : '');
+}
+
+async function runSearch(inputId, targetId, addFn, jpId) {
+  const raw = document.getElementById(inputId).value.trim();
+  if (!raw) return;
+  const jp = jpId ? document.getElementById(jpId).checked : false;
+  const el = document.getElementById(targetId);
+  el.innerHTML = '<span class="muted">' + (jp ? 'loading Japanese database…' : 'searching…') + '</span>';
+  const { cards, query, total } = await POS.findCards(raw, { limit: 60, japanese: jp });
+  hitState = { cards, filter: '', target: targetId, addFn };
+  paintHits();
+  if (query.number && total) toast(`#${query.number} → ${total} match${total === 1 ? '' : 'es'}`);
+}
+
+/* ── BUY-INS ──
+ * Cards picked up at the show that never made it into the app. Cost basis is
+ * the point: without what you paid, the show report can only guess.
+ */
+let buyCards = [];
+
+window.openBuyIn = () => {
+  buyCards = [];
+  document.getElementById('buy-q').value = '';
+  document.getElementById('buy-results').innerHTML = '';
+  renderBuy();
+  openSheet('buy');
+};
+
+window.buySearch = () => runSearch('buy-q', 'buy-results', 'addBuy', 'buy-jp');
+
+window.addBuy = i => {
+  const c = hitState.cards[i];
+  if (!c) return;
+  const market = Number(c.market_price) || 0;
+  buyCards.push({
+    name: c.name, set: c.set_name || '', number: c.number || '',
+    condition: 'NM', market: market,
+    paid: Math.round(market * 0.5 * 100) / 100,   // a starting point, not a rule
+    ladder: c.prices_by_condition || {}, nm: market, isJP: !!c._jp,
+    imageUrl: c.image_url || null
+  });
+  document.getElementById('buy-results').innerHTML = '';
+  document.getElementById('buy-q').value = '';
+  renderBuy();
+};
+window.removeBuy = i => { buyCards.splice(i, 1); renderBuy(); };
+window.editBuy = (i, field, val) => {
+  const c = buyCards[i];
+  if (field === 'condition') {
+    c.condition = val;
+    const r = POS.priceAtCondition(c.ladder, val, c.nm);
+    c.market = r.price;
+    c.estimated = !r.exact;
+  } else {
+    c[field] = parseFloat(val) || 0;
+  }
+  renderBuy();
+};
+
+function renderBuy() {
+  document.getElementById('buy-list').innerHTML = !buyCards.length
+    ? '<span class="muted">Nothing added yet.</span>'
+    : `<div class="card" style="margin:0">${buyCards.map((c, i) => `
+        <div style="padding:9px 0;border-bottom:1px solid var(--g200)">
+          <div style="font-weight:600">${esc(c.name)}</div>
+          <div class="muted" style="margin-bottom:6px">${esc(c.set)} ${c.number ? '#' + esc(c.number) : ''}</div>
+          <div class="row" style="flex-wrap:wrap">
+            <div><label>Condition</label>${condSelect(c, `editBuy(${i},'condition',this.value)`)}</div>
+            <div style="flex:1"><label>Market${c.estimated ? ' *' : ''}</label>
+              <input type="number" step="0.01" value="${c.market}" onchange="editBuy(${i},'market',this.value)"></div>
+            <div style="flex:1"><label>Paid</label>
+              <input type="number" step="0.01" value="${c.paid}" onchange="editBuy(${i},'paid',this.value)"></div>
+            <button class="btn sm" style="margin-top:16px" onclick="removeBuy(${i})">×</button>
+          </div>
+        </div>`).join('')}</div>`;
+
+  const market = buyCards.reduce((s, c) => s + POS.toCents(c.market), 0);
+  const paid   = buyCards.reduce((s, c) => s + POS.toCents(c.paid), 0);
+  const pct    = market > 0 ? Math.round((paid / market) * 1000) / 10 : null;
+  document.getElementById('buy-summary').innerHTML = buyCards.length ? `
+    <div class="line"><span class="muted">Market value</span><span>${money(market)}</span></div>
+    <div class="line"><span class="muted">You paid</span><span>${money(paid)}</span></div>
+    <div class="line"><span class="muted">Paid % of market</span>
+      <span class="pill ${pct == null ? 'w' : pct <= 60 ? 'ok' : pct <= 80 ? 'w' : 'no'}">${pct == null ? '—' : pct + '%'}</span></div>
+    <div class="line"><strong>Instant paper gain</strong><span>${money(market - paid)}</span></div>` : '';
+}
+
+window.saveBuyIn = async () => {
+  if (!buyCards.length) { toast('Nothing to add'); return; }
+  try {
+    await Promise.all(buyCards.map(c => addDoc(collection(db, 'vendor'), {
+      name: c.name, set: c.set, number: c.number, condition: c.condition || 'NM',
+      qty: 1, tcgPrice: c.market, askingPrice: c.market, costBasis: c.paid,
+      isJapanese: !!c.isJP,
+      imageUrl: c.imageUrl || null, acquiredVia: 'cash', acquiredAt: Date.now(),
+      addedAt: Date.now(),
+      lastSeenAt: Date.now(), lastSeenSession: session ? session.id : null
+    })));
+    // Bought at the show and in your hand right now — count them as seen.
+    toast('Added ' + buyCards.length + ' card(s)');
+    buyCards = [];
+    closeSheet('buy');
+    renderCheck();
+  } catch (e) { toast('Save failed: ' + e.message); }
+};
+
+/* Condition dropdown priced from the card's own ladder. Each option shows what
+ * that grade is worth, so picking one is a decision rather than a guess. */
+function condSelect(card, onchange) {
+  const opts = POS.conditionOptions(card.ladder, card.nm != null ? card.nm : card.market);
+  return `<select onchange="${onchange}" style="font-size:14px">
+    ${opts.map(o => `<option value="${o.code}" ${card.condition === o.code ? 'selected' : ''}>
+       ${o.code} · $${o.price.toFixed(2)}${o.exact ? '' : '*'}</option>`).join('')}
+  </select>`;
+}
+
+/* ── SHOW ──
+ * Start and end a show from the phone, and see the running numbers without
+ * walking back to a laptop. Position is inventory + cash, so a show that turns
+ * stock into cash at par correctly reads as flat.
+ */
+const liveShow = () => events.find(e => e.startedAt && !e.endedAt) || null;
+const m$ = c => (c < 0 ? '-$' : '$') + Math.round(Math.abs(c) / 100).toLocaleString('en-US');
+
+function renderLiveBanner() {
+  const el = document.getElementById('live-banner');
+  if (!el) return;
+  const ev = liveShow();
+  const dot = document.getElementById('show-dot');
+  if (dot) dot.textContent = ev ? '●' : '';
+  if (!ev) { el.style.display = 'none'; return; }
+
+  const r = ShowReport.showReport(ev, vendorCards, allTx, []);
+  el.style.display = 'block';
+  el.innerHTML = `<div class="card" style="border-color:var(--green);background:var(--green-l)">
+    <div class="row" style="justify-content:space-between">
+      <div>
+        <div style="font-size:11px;color:var(--green);font-weight:700">● LIVE — ${esc(ev.name || 'Show')}</div>
+        <div class="big">${m$(r.cashInCents)}<span class="muted" style="font-size:13px;font-weight:400"> cash in</span></div>
+      </div>
+      <div style="text-align:right">
+        <div class="muted">${r.soldCount} sold · ${r.tradedOutCount} traded</div>
+        <button class="btn sm" onclick="showTab('show')">Details</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+window.renderShow = () => {
+  const el = document.getElementById('show-body');
+  if (!el || !window.ShowReport) return;
+  const ev = liveShow();
+
+  if (!ev) {
+    const today = new Date().toISOString().slice(0, 10);
+    const soon = events.filter(e => !e.endedAt && (e.date || '') >= today).slice(0, 5);
+    const done = events.filter(e => e.endedAt).sort((a, b) => (b.endedAt || 0) - (a.endedAt || 0)).slice(0, 3);
+    const inv = ShowReport.inventoryValueCents(vendorCards);
+    el.innerHTML = `
+      <div class="card">
+        <div class="muted">Inventory on hand</div>
+        <div class="big" style="font-size:30px">${m$(inv)}</div>
+      </div>
+      <h3>Start a show</h3>
+      ${soon.length ? soon.map(e => `<div class="card">
+          <div class="row" style="justify-content:space-between">
+            <div><strong>${esc(e.name || 'Show')}</strong><div class="muted">${esc(e.date || '')}${e.location ? ' · ' + esc(e.location) : ''}</div></div>
+            <button class="btn g sm" onclick="startShowPOS('${e.id}')">Start</button>
+          </div>
+        </div>`).join('')
+        : '<div class="card muted">No upcoming shows. Add them on the Shows page.</div>'}
+      ${done.length ? `<h3>Recent</h3>${done.map(e => {
+        const r = ShowReport.showReport(e, vendorCards, allTx, []);
+        return `<div class="card">
+          <div class="row" style="justify-content:space-between">
+            <div><strong>${esc(e.name || 'Show')}</strong><div class="muted">${esc(e.date || '')}</div></div>
+            <div style="text-align:right">
+              <div style="font-weight:700;color:${r.totalGainCents >= 0 ? 'var(--green)' : 'var(--red)'}">
+                ${r.totalGainCents == null ? '—' : m$(r.totalGainCents)}</div>
+              <div class="muted">${r.cashInCents ? m$(r.cashInCents) + ' cash' : ''}</div>
+            </div>
+          </div></div>`;
+      }).join('')}` : ''}`;
+    return;
+  }
+
+  const r = ShowReport.showReport(ev, vendorCards, allTx, []);
+  const warn = ShowReport.reportWarnings(r);
+  const line = (label, val, colour) =>
+    `<div class="line"><span class="muted">${label}</span><span style="font-weight:600${colour ? ';color:' + colour : ''}">${val}</span></div>`;
+
+  el.innerHTML = `
+    <div class="card" style="border-color:var(--green)">
+      <div style="font-size:11px;color:var(--green);font-weight:700">● LIVE</div>
+      <div class="big" style="font-size:22px">${esc(ev.name || 'Show')}</div>
+      <div class="muted">started ${new Date(ev.startedAt).toLocaleString()}</div>
+    </div>
+
+    <div class="card">
+      ${line('Cash in', m$(r.cashInCents), 'var(--green)')}
+      ${line('Sold', r.soldCount + ' card' + (r.soldCount === 1 ? '' : 's'))}
+      ${line('% of market', r.pctOfMarket == null ? '—' : r.pctOfMarket + '%')}
+      ${line('Traded out', r.tradedOutCount + ' · ' + m$(r.tradedOutValueCents), 'var(--blue)')}
+      ${line('Trade spread', m$(r.tradeSpreadCents), r.tradeSpreadCents >= 0 ? 'var(--green)' : 'var(--red)')}
+      ${line('Spent on cards', m$(r.cashSpentOnCardsCents))}
+    </div>
+
+    <div class="card">
+      ${line('Inventory at open', r.openInvCents == null ? '—' : m$(r.openInvCents))}
+      ${line('Inventory now', m$(r.closeInvCents))}
+      ${line('Change', r.invDeltaCents == null ? '—' : m$(r.invDeltaCents), r.invDeltaCents >= 0 ? 'var(--green)' : 'var(--red)')}
+      ${line('Total gain', r.totalGainCents == null ? '—' : m$(r.totalGainCents) + (r.totalGainPct != null ? ` (${r.totalGainPct}%)` : ''),
+             r.totalGainCents >= 0 ? 'var(--green)' : 'var(--red)')}
+    </div>
+
+    ${warn.length ? `<div class="card" style="border-color:var(--amber);background:var(--amber-l)">
+      <span class="muted">⚠︎ ${warn.join(' · ')}</span></div>` : ''}
+
+    <button class="btn" style="width:100%" onclick="endShowPOS('${ev.id}')">■ End show</button>
+    <div class="muted" style="margin-top:8px;font-size:12px">
+      Ending snapshots inventory and cash. You can do it when you get home — nothing expires.
+    </div>`;
+};
+
+window.startShowPOS = async (id) => {
+  const ev = events.find(e => e.id === id);
+  if (!ev) return;
+  const running = liveShow();
+  if (running) { toast(`"${running.name}" is still open`); return; }
+  const openInv = ShowReport.inventoryValueCents(vendorCards) / 100;
+  const cash = prompt('Cash float you are starting with ($):', ev.openCash != null ? ev.openCash : '500');
+  if (cash == null) return;
+  try {
+    await updateDoc(doc(db, 'events', id), {
+      startedAt: Date.now(), endedAt: deleteField(),
+      openInvValue: openInv, openCash: parseFloat(cash) || 0,
+      closeInvValue: deleteField(), closeCash: deleteField()
+    });
+    toast(`Started — $${openInv.toFixed(0)} inventory on hand`);
+  } catch (e) { toast('Could not start: ' + e.message); }
+};
+
+window.endShowPOS = async (id) => {
+  const ev = events.find(e => e.id === id);
+  if (!ev || !ev.startedAt) return;
+  const closeInv = ShowReport.inventoryValueCents(vendorCards) / 100;
+  const cash = prompt('Cash you finished with ($):', ev.openCash != null ? ev.openCash : '');
+  if (cash == null) return;
+  try {
+    await updateDoc(doc(db, 'events', id), {
+      endedAt: Date.now(), closeInvValue: closeInv, closeCash: parseFloat(cash) || 0
+    });
+    toast('Show closed');
+  } catch (e) { toast('Could not end: ' + e.message); }
+};
+
+/* ── CANCELLING ──
+ * A recorded transaction can't just be deleted: its cards are already marked
+ * gone, and a closed trade also created inventory from the intake side.
+ * Voiding reverses both and keeps the record so the history stays honest.
+ */
+window.cancelCart = () => {
+  if (!cart.length) return;
+  if (cart.length > 1 && !confirm(`Clear all ${cart.length} cards from the cart?`)) return;
+  cart = [];
+  renderCart();
+  toast('Cart cleared');
+};
+
+window.cancelCheckout = () => {
+  closeSheet('checkout');
+  toast('Nothing recorded — cart still has ' + cart.length + ' card(s)');
+};
+
+window.voidTransaction = async (txId) => {
+  const tx = allTx.find(t => t.id === txId);
+  if (!tx) return;
+
+  const outN = (tx.out || []).length;
+  const inN  = (tx.in || []).filter(x => x.cardId).length;
+  const what = tx.type === 'trade' ? 'trade' : 'sale';
+  let msg = `Cancel this ${what}?\n\n${outN} card(s) go back into inventory.`;
+  if (inN) msg += `\n${inN} card(s) taken in will be REMOVED from inventory.`;
+  if (!confirm(msg)) return;
+
+  try {
+    // 1. your cards return to inventory
+    await Promise.all((tx.out || []).map(o => updateDoc(doc(db, 'vendor', o.cardId), {
+      soldPrice: deleteField(), soldAt: deleteField(), exitType: deleteField(),
+      exitAt: deleteField(), exitValue: deleteField(), txId: deleteField()
+    })));
+
+    // 2. anything the trade brought in is archived rather than deleted —
+    //    a stray doc is recoverable, a deleted one isn't.
+    await Promise.all((tx.in || []).filter(x => x.cardId).map(x =>
+      updateDoc(doc(db, 'vendor', x.cardId), {
+        archived: true, archivedAt: Date.now(), archivedReason: 'trade cancelled'
+      })));
+
+    await updateDoc(doc(db, 'transactions', txId), {
+      status: 'void', voidedAt: Date.now(), voidReason: 'cancelled at POS'
+    });
+    toast(`${what[0].toUpperCase() + what.slice(1)} cancelled — ${outN} card(s) restored`);
+  } catch (e) {
+    toast('Cancel failed: ' + e.message);
+  }
+};
+
+/* ── open trades ── */
+function renderOpen() {
+  const n = openTrades.length;
+  document.getElementById('open-count').textContent = n ? '(' + n + ')' : '';
+
+  const openHtml = !n
+    ? `<div class="card muted">No open trades. Everything's reconciled.</div>`
+    : openTrades.map(t => `
+      <div class="card">
+        <div class="row" style="justify-content:space-between">
+          <strong>${money(Math.round(t.outTotal * 100))} out</strong>
+          <span class="muted">${new Date(t.at).toLocaleString()}</span>
+        </div>
+        <div class="muted" style="margin:6px 0">${(t.out || []).map(o => esc(o.name)).join(', ')}</div>
+        <div class="row">
+          <button class="btn b sm" style="flex:1" onclick="openIntake('${t.id}')">Add cards taken in</button>
+          <button class="btn sm" onclick="voidTransaction('${t.id}')">Cancel</button>
+        </div>
+      </div>`).join('');
+
+  const recent = allTx.filter(t => t.status !== 'open').slice(0, 12);
+  const recentHtml = !recent.length ? '' : `
+    <h3>Recent</h3>
+    <div class="card">${recent.map(t => {
+      const voided = t.status === 'void';
+      const label = t.type === 'trade' ? 'Trade' : 'Sale';
+      return `<div class="line" style="${voided ? 'opacity:.5' : ''}">
+        <div style="min-width:0">
+          <div style="font-weight:600">${label} · ${money(Math.round((t.outTotal || 0) * 100))}
+            ${voided ? '<span class="pill no">void</span>' : ''}</div>
+          <div class="muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+            ${(t.out || []).map(o => esc(o.name)).join(', ') || '—'}</div>
+          <div class="muted">${new Date(t.at).toLocaleString()}</div>
+        </div>
+        ${voided ? '' : `<button class="btn sm" onclick="voidTransaction('${t.id}')">Cancel</button>`}
+      </div>`;
+    }).join('')}</div>`;
+
+  document.getElementById('open-body').innerHTML = openHtml + recentHtml;
+}
+
+window.openIntake = id => {
+  intakeTrade = openTrades.find(t => t.id === id);
+  intakeCards = (intakeTrade.in || []).slice();
+  document.getElementById('in-context').textContent =
+    `${money(Math.round(intakeTrade.outTotal * 100))} of value went out. Credit is ${Math.round(POS.CREDIT_RATE * 100)}% of market.`;
+  document.getElementById('in-results').innerHTML = '';
+  document.getElementById('in-q').value = '';
+  renderIntake();
+  openSheet('intake');
+};
+
+window.intakeSearch = () => runSearch('in-q', 'in-results', 'addIntake', 'in-jp');
+
+window.addIntake = i => {
+  const c = hitState.cards[i];
+  if (!c) return;
+  const market = Number(c.market_price) || 0;
+  intakeCards.push({
+    name: c.name, set: c.set_name || '', number: c.number || '',
+    condition: 'NM', market: market,
+    credit: Math.round(market * POS.CREDIT_RATE * 100) / 100,
+    ladder: c.prices_by_condition || {}, nm: market, isJP: !!c._jp,
+    imageUrl: c.image_url || null, tcgplayer_id: c.tcgplayer_id || null
+  });
+  document.getElementById('in-results').innerHTML = '';
+  document.getElementById('in-q').value = '';
+  renderIntake();
+};
+window.removeIntake = i => { intakeCards.splice(i, 1); renderIntake(); };
+window.editIntake = (i, field, val) => {
+  const c = intakeCards[i];
+  if (field === 'condition') {
+    c.condition = val;
+    const r = POS.priceAtCondition(c.ladder, val, c.nm);
+    c.market = r.price;
+    c.estimated = !r.exact;
+  } else {
+    c[field] = parseFloat(val) || 0;
+  }
+  if (field !== 'credit') c.credit = Math.round(c.market * POS.CREDIT_RATE * 100) / 100;
+  renderIntake();
+};
+
+function renderIntake() {
+  document.getElementById('in-list').innerHTML = !intakeCards.length
+    ? '<span class="muted">Nothing added yet.</span>'
+    : `<div class="card" style="margin:0">${intakeCards.map((c, i) => `
+        <div style="padding:9px 0;border-bottom:1px solid var(--g200)">
+          <div class="row" style="justify-content:space-between;gap:8px">
+            <div style="min-width:0">
+              <div style="font-weight:600">${c.isJP ? '🇯🇵 ' : ''}${esc(c.name)}</div>
+              <div class="muted">${esc(c.set)} ${c.number ? '#' + esc(c.number) : ''}</div>
+            </div>
+            <button class="btn sm" onclick="removeIntake(${i})">×</button>
+          </div>
+          <div class="row" style="margin-top:6px;gap:8px;flex-wrap:wrap">
+            ${condSelect(c, `editIntake(${i},'condition',this.value)`)}
+            <input type="number" step="0.01" value="${c.market}" style="width:92px;font-size:14px"
+                   onchange="editIntake(${i},'market',this.value)">
+            <span class="muted">→ credit ${money(Math.round(c.credit * 100))}</span>
+            ${c.estimated ? '<span class="pill w">est.</span>' : ''}
+          </div>
+        </div>`).join('')}</div>`;
+
+  const s = POS.tradeSummary(
+    (intakeTrade.out || []).map(o => ({ id: o.cardId, name: o.name, askingPrice: o.value })),
+    intakeCards);
+  document.getElementById('in-summary').innerHTML = `
+    <div class="line"><span class="muted">Value out</span><span>${money(s.outTotalCents)}</span></div>
+    <div class="line"><span class="muted">Credit given</span><span>${money(s.inCreditCents)}</span></div>
+    <div class="line"><span class="muted">Market taken in</span><span>${money(s.inMarketCents)}</span></div>
+    <div class="line"><span class="muted">Spread</span>
+      <span class="pill ${s.spreadCents >= 0 ? 'ok' : 'no'}">${money(s.spreadCents)}</span></div>
+    <div class="line"><strong>${POS.cashLabel(s.cashDeltaCents)}</strong></div>`;
+}
+
+window.closeTrade = async () => {
+  if (!intakeCards.length && !confirm('Close this trade with no cards taken in?')) return;
+  const s = POS.tradeSummary(
+    (intakeTrade.out || []).map(o => ({ id: o.cardId, name: o.name, askingPrice: o.value })),
+    intakeCards);
+  try {
+    // Cards enter inventory at market value, cost basis = the credit given.
+    const added = await Promise.all(intakeCards.map(c => addDoc(collection(db, 'vendor'), {
+      name: c.name, set: c.set, number: c.number, condition: c.condition || 'NM',
+      qty: 1, tcgPrice: c.market, askingPrice: c.market, costBasis: c.credit,
+      isJapanese: !!c.isJP,
+      imageUrl: c.imageUrl || null, acquiredVia: 'trade', acquiredAt: Date.now(),
+      txId: intakeTrade.id, addedAt: Date.now()
+    })));
+    await updateDoc(doc(db, 'transactions', intakeTrade.id), {
+      status: 'closed',
+      in: intakeCards.map((c, i) => ({ ...c, cardId: added[i].id })),
+      inCredit: s.inCreditCents / 100,
+      inMarket: s.inMarketCents / 100,
+      spread: s.spreadCents / 100,
+      cashDelta: s.cashDeltaCents / 100,
+      closedAt: Date.now()
+    });
+    closeSheet('intake');
+    toast('Trade closed — ' + intakeCards.length + ' card(s) added');
+  } catch (e) { toast('Save failed: ' + e.message); }
+};
+
+/* ── printer status (labels print from the inventory page) ── */
+(async () => {
+  if (!window.Labels) return;
+  const s = await Labels.bpStatus();
+  const el = document.getElementById('printer-pill');
+  el.className = 'pill ' + (s.ok ? 'ok' : 'no');
+  el.textContent = s.ok ? 'printer ready' : 'no printer';
+})();
+
+renderCart(); renderOpen(); renderCheck();
+if (location.hash === '#check') showTab('check');
+</script>
+</body>
+</html>

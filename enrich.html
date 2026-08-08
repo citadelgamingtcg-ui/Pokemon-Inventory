@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paragon — Price DB Image Enrichment</title>
+<style>
+  :root{--bg:#141210;--panel:#1b1815;--panel2:#221e1a;--line:#332e28;--ink:#efe7dc;
+        --sub:#8d8378;--gold:#c9a227;--green:#5fa86a;--red:#c0564b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,serif;padding:0 0 60px}
+  header{text-align:center;padding:26px 16px;border-bottom:1px solid var(--line)}
+  h1{margin:0;color:var(--gold);letter-spacing:.22em;font-size:26px}
+  .sub{color:var(--sub);letter-spacing:.3em;font-size:11px;margin-top:4px}
+  .tag{font-style:italic;margin-top:10px;font-size:14px}
+  .wrap{max-width:900px;margin:0 auto;padding:22px 16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+  .btn{background:var(--gold);color:#241d05;border:0;padding:11px 20px;border-radius:7px;
+       font:inherit;font-weight:700;cursor:pointer;font-size:15px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .bar{height:9px;background:var(--panel2);border-radius:5px;overflow:hidden;margin:12px 0}
+  .bar > div{height:100%;background:var(--gold);width:0;transition:width .2s}
+  .log{font-family:'Courier New',monospace;font-size:12px;color:var(--sub);
+       max-height:280px;overflow-y:auto;background:var(--panel2);padding:10px;
+       border-radius:6px;margin-top:12px;white-space:pre-wrap;line-height:1.55}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:14px}
+  .st{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;text-align:center}
+  .st .l{font-size:10px;letter-spacing:.13em;color:var(--sub);text-transform:uppercase}
+  .st .v{font-size:20px;font-weight:700;margin-top:4px}
+  ol{line-height:1.8;color:var(--sub);font-size:14px} ol b{color:var(--ink)}
+  a{color:var(--gold)}
+  .ver-badge { display:inline-block; margin-left:8px; padding:1px 7px; border-radius:99px;
+               font-size:11px; font-weight:600; background:rgba(212,175,106,.18);
+               color:#D4AF6A; border:1px solid rgba(212,175,106,.35); vertical-align:middle; }
+</style>
+<script src="js/version.js?v=3.67.0"></script>
+</head>
+<body>
+<header>
+  <h1>PARAGON</h1>
+  <div class="sub">C O L L E C T I B L E S</div>
+  <div class="tag">Price Database &mdash; Enrichment &amp; Refresh <span id="app-version" class="ver-badge">v—</span></div>
+</header>
+
+<div class="wrap">
+  <div class="card" id="images">
+    <p style="margin-top:0">Your price database was built from a TCGplayer CSV export, which only contains
+    <b>SKU ids</b> (one per condition) &mdash; not the <b>product ids</b> needed to build image URLs.</p>
+    <p>This tool matches every card against TCGCSV's free product catalog to recover the real product id,
+    then writes a new <code>prices.json</code> with permanent image links baked in. It only needs to be run
+    once per price export.</p>
+    <ol>
+      <li>Press <b>Start</b> &mdash; takes a few minutes, no rate limits involved.</li>
+      <li>When it finishes, press <b>Download</b>.</li>
+      <li>Send the downloaded <code>prices.json</code> back to be packaged into the next build.</li>
+    </ol>
+    <button class="btn" id="go">Start enrichment</button>
+    <button class="btn ghost" id="dl" disabled>Download prices.json</button>
+    <div class="bar"><div id="prog"></div></div>
+    <div class="stats">
+      <div class="st"><div class="l">Sets scanned</div><div class="v" id="s-groups">0</div></div>
+      <div class="st"><div class="l">Cards matched</div><div class="v" style="color:var(--green)" id="s-hit">0</div></div>
+      <div class="st"><div class="l">Unmatched</div><div class="v" id="s-miss">0</div></div>
+      <div class="st"><div class="l">Coverage</div><div class="v" style="color:var(--gold)" id="s-pct">&mdash;</div></div>
+    </div>
+    <div class="log" id="log">Ready.</div>
+  </div>
+  <div class="card" id="japanese">
+    <h3 style="margin-top:0;color:var(--gold);letter-spacing:.08em">Japanese card database</h3>
+    <p>Your CSV export contains <b>no Japanese cards</b>, so JP searches fall back to the live API &mdash;
+    which can only scan about <b>25 of the ~417</b> Japanese sets before hitting the serverless CPU budget.
+    That is why Japanese lookups return so little.</p>
+    <p>This builds a complete local Japanese database straight from TCGCSV (prices, images and product ids),
+    so JP searches become instant and cover every set.</p>
+    <p style="color:var(--sub);font-size:13px">Note: TCGCSV publishes one market price per printing rather than a
+    full condition ladder, so Japanese prices are stored as Near&nbsp;Mint and other conditions fall back to it.</p>
+    <button class="btn" id="go-jp">Build Japanese database</button>
+    <button class="btn ghost" id="dl-jp" disabled>Download prices-jp.json</button>
+    <div class="bar"><div id="prog-jp"></div></div>
+    <div class="stats">
+      <div class="st"><div class="l">Sets scanned</div><div class="v" id="j-groups">0</div></div>
+      <div class="st"><div class="l">Cards built</div><div class="v" style="color:var(--green)" id="j-cards">0</div></div>
+      <div class="st"><div class="l">With price</div><div class="v" id="j-priced">0</div></div>
+      <div class="st"><div class="l">With image</div><div class="v" style="color:var(--gold)" id="j-img">0</div></div>
+    </div>
+    <div class="log" id="log-jp">Ready.</div>
+  </div>
+
+  <div class="card" id="prices">
+    <h2 style="margin:0 0 10px;font-size:17px">Refresh prices from a TCGplayer CSV export</h2>
+    <p style="margin-top:0">Prices go stale. Export a fresh pricing CSV from TCGplayer and drop it here —
+    this rebuilds the condition ladder for every printing while <b>keeping the product ids</b>
+    already recovered by the enrichment above, so you don't lose your card images.</p>
+    <ol>
+      <li>TCGplayer &rarr; Pricing &rarr; export your CSV.</li>
+      <li>Choose the file below. Columns are detected automatically and previewed.</li>
+      <li>Press <b>Build</b>, then <b>Download</b>, and send the file back to be packaged.</li>
+    </ol>
+    <input type="file" id="csv-file" accept=".csv,text/csv" style="margin-bottom:10px">
+    <div id="csv-cols" style="font-size:13px;margin-bottom:10px"></div>
+    <button class="btn" id="csv-go" disabled>Build prices.json</button>
+    <button class="btn ghost" id="csv-dl" disabled>Download prices.json</button>
+    <div class="bar"><div id="csv-prog"></div></div>
+    <div class="stats">
+      <div class="st"><div class="l">CSV rows</div><div class="v" id="c-rows">0</div></div>
+      <div class="st"><div class="l">Printings</div><div class="v" id="c-print">0</div></div>
+      <div class="st"><div class="l">Prices changed</div><div class="v" style="color:var(--green)" id="c-chg">0</div></div>
+      <div class="st"><div class="l">Product ids kept</div><div class="v" id="c-pid">0</div></div>
+    </div>
+    <div class="log" id="log-csv">Choose a CSV to begin.</div>
+  </div>
+
+  <p style="text-align:center"><a href="index.html">&larr; Back to Inventory</a></p>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const log = m => { const l=$('log'); l.textContent += '\n'+m; l.scrollTop = l.scrollHeight; };
+
+// Same normalization the price DB uses, so keys line up.
+const normName = s => (s||'').toLowerCase().replace(/[''`]/g,'').replace(/[-–—]/g,' ')
+                        .replace(/\s+/g,' ').trim();
+function normNum(n){
+  const raw = String(n||'').replace(/^#/,'').replace(/\s/g,'').toLowerCase();
+  const m = raw.match(/^([a-z]*)0*(\d+)([a-z]*)\/0*(\d+)([a-z]*)$/);
+  if (m) return `${m[1]}${m[2]}${m[3]}/${m[4]}${m[5]}`;
+  const b = raw.match(/^([a-z]*)0*(\d+)([a-z]*)$/);
+  return b ? `${b[1]}${b[2]}${b[3]}` : raw;
+}
+const setKey = s => normName(s).replace(/^[a-z0-9]+:\s*/,'');
+// Our CSV says "Unseen Forces"; TCGCSV says "EX Unseen Forces". Strip common
+// era prefixes so those line up.
+const setCore = s => setKey(s)
+  .replace(/^(ex|xy|hs|dp|swsh|sv|sm|bw)\s+/,'')
+  .replace(/\s+/g,' ').trim();
+
+const tcg = path => fetch(`/tcgcsv?path=${encodeURIComponent(path)}`).then(r => {
+  if(!r.ok) throw new Error(path+' -> '+r.status);
+  return r.json();
+});
+
+let enriched = null;
+
+$('go').onclick = async () => {
+  $('go').disabled = true;
+  $('log').textContent = 'Loading local price database…';
+  try {
+    const rows = await fetch('data/prices.json').then(r=>r.json());
+    log(`Loaded ${rows.length} printings.`);
+
+    // Index our records by set -> (number|name) -> [records]
+    const bySet = new Map();
+    for (const r of rows) {
+      const k = setKey(r.s);
+      if (!bySet.has(k)) bySet.set(k, []);
+      bySet.get(k).push(r);
+    }
+    // secondary index on the prefix-stripped name
+    const byCore = new Map();
+    for (const [k, list] of bySet) {
+      const c = setCore(k);
+      if (!byCore.has(c)) byCore.set(c, []);
+      byCore.get(c).push(...list);
+    }
+    log(`Local sets: ${bySet.size}`);
+
+    // Resolve a TCGCSV group name to our records
+    const recordsFor = gname => {
+      const k = setKey(gname);
+      if (bySet.has(k)) return bySet.get(k);
+      const c = setCore(gname);
+      if (byCore.has(c)) return byCore.get(c);
+      return null;
+    };
+
+    // Pull TCGCSV group list for English Pokémon (category 3)
+    const groups = (await tcg('/tcgplayer/3/groups')).results || [];
+    log(`TCGCSV groups: ${groups.length}`);
+
+    // Only scan groups whose name matches a set we actually have
+    const targets = groups.filter(g => recordsFor(g.name));
+    log(`Matching sets to scan: ${targets.length}\n`);
+
+    let done=0, hit=rows.filter(r=>r.pid).length;
+    if (hit) log(`Already resolved from a previous run: ${hit}`);
+    for (const g of targets) {
+      done++;
+      $('prog').style.width = (done/targets.length*100).toFixed(1)+'%';
+      $('s-groups').textContent = done;
+      let products = [];
+      try {
+        products = (await tcg(`/tcgplayer/3/${g.groupId}/products`)).results || [];
+      } catch(e){ log(`  ! ${g.name}: ${e.message}`); continue; }
+
+      // Build lookup: number -> product, and name -> product
+      const byNum = new Map(), byName = new Map();
+      for (const p of products) {
+        const ext = p.extendedData || [];
+        const num = (ext.find(d => d.name === 'Number') || {}).value || '';
+        if (num) {
+          const k = normNum(num);
+          if (!byNum.has(k)) byNum.set(k, []);
+          byNum.get(k).push(p);
+        }
+        const nk = normName(p.cleanName || p.name);
+        if (!byName.has(nk)) byName.set(nk, []);
+        byName.get(nk).push(p);
+      }
+
+      let groupHits = 0;
+      for (const r of (recordsFor(g.name) || [])) {
+        if (r.pid) continue;
+        let cand = byNum.get(normNum(r.u)) || [];
+        if (cand.length > 1) {
+          const want = normName(r.n);
+          const exact = cand.filter(p => normName(p.cleanName||p.name) === want);
+          if (exact.length) cand = exact;
+        }
+        if (!cand.length) cand = byName.get(normName(r.n)) || [];
+        if (cand.length) {
+          const p = cand[0];
+          r.pid = p.productId;   // image URL is derived from this at runtime
+          hit++; groupHits++;
+        }
+      }
+      $('s-hit').textContent = hit;
+      $('s-miss').textContent = rows.length - hit;
+      $('s-pct').textContent = (hit/rows.length*100).toFixed(1)+'%';
+      log(`  ${g.name} — ${groupHits} matched (${products.length} products)`);
+    }
+
+    enriched = rows;
+    $('prog').style.width='100%';
+    log(`\nDone. ${hit} of ${rows.length} printings now have images (${(hit/rows.length*100).toFixed(1)}%).`);
+    log('Press Download, then send the file back.');
+    $('dl').disabled = false;
+  } catch(e) {
+    log('ERROR: '+e.message);
+    $('go').disabled = false;
+  }
+};
+
+// ── Japanese database builder (TCGCSV category 85) ──────────────────────────
+const logJ = m => { const l=$('log-jp'); l.textContent += '\n'+m; l.scrollTop = l.scrollHeight; };
+let jpRows = null;
+
+$('go-jp').onclick = async () => {
+  $('go-jp').disabled = true;
+  $('log-jp').textContent = 'Fetching Japanese set list…';
+  try {
+    // Discover the Japanese Pokémon category (usually 85)
+    let cat = 85;
+    try {
+      const cats = (await tcg('/tcgplayer/categories')).results || [];
+      const jp = cats.find(c => /japan/i.test(c.name) && /pok[eé]mon/i.test(c.name));
+      if (jp) cat = jp.categoryId;
+    } catch {}
+    logJ(`Japanese category: ${cat}`);
+
+    const groups = (await tcg(`/tcgplayer/${cat}/groups`)).results || [];
+    logJ(`Sets to scan: ${groups.length}\n`);
+
+    const out = [];
+    let done = 0, priced = 0, withImg = 0;
+
+    for (const g of groups) {
+      done++;
+      $('prog-jp').style.width = (done/groups.length*100).toFixed(1)+'%';
+      $('j-groups').textContent = done;
+
+      let products = [], prices = [];
+      try {
+        [products, prices] = await Promise.all([
+          tcg(`/tcgplayer/${cat}/${g.groupId}/products`).then(r => r.results || []),
+          tcg(`/tcgplayer/${cat}/${g.groupId}/prices`).then(r => r.results || [])
+        ]);
+      } catch(e) { logJ(`  ! ${g.name}: ${e.message}`); continue; }
+
+      // productId -> { subTypeName: marketPrice }
+      const priceMap = new Map();
+      for (const pr of prices) {
+        if (pr.marketPrice == null) continue;
+        if (!priceMap.has(pr.productId)) priceMap.set(pr.productId, {});
+        priceMap.get(pr.productId)[pr.subTypeName || 'Normal'] = pr.marketPrice;
+      }
+
+      let made = 0;
+      for (const p of products) {
+        const ext = p.extendedData || [];
+        const num = (ext.find(d => d.name === 'Number') || {}).value || '';
+        const rar = (ext.find(d => d.name === 'Rarity') || {}).value || '';
+        const pm = priceMap.get(p.productId) || {};
+        const printings = Object.keys(pm);
+        // one record per printing; skip products with no price at all
+        if (!printings.length) continue;
+        for (const pv of printings) {
+          const price = Math.round(pm[pv] * 100) / 100;
+          if (!(price > 0)) continue;
+          out.push({
+            i: String(p.productId),
+            n: (p.cleanName || p.name || '').trim(),
+            s: g.name,
+            u: num,
+            r: rar,
+            v: pv,
+            c: { NM: price },      // TCGCSV gives one market price, not a ladder
+            pid: p.productId,
+            jp: 1
+          });
+          priced++; made++;
+          if (p.imageUrl || p.productId) withImg++;
+        }
+      }
+      $('j-cards').textContent = out.length;
+      $('j-priced').textContent = priced;
+      $('j-img').textContent = withImg;
+      if (made) logJ(`  ${g.name} — ${made} printings`);
+    }
+
+    jpRows = out;
+    $('prog-jp').style.width = '100%';
+    logJ(`\nDone. ${out.length} Japanese printings built across ${done} sets.`);
+    logJ('Press Download, then send the file back.');
+    $('dl-jp').disabled = false;
+  } catch(e) {
+    logJ('ERROR: '+e.message);
+    $('go-jp').disabled = false;
+  }
+};
+
+$('dl-jp').onclick = () => {
+  const blob = new Blob([JSON.stringify(jpRows)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'prices-jp.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+$('dl').onclick = () => {
+  const blob = new Blob([JSON.stringify(enriched)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'prices.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+// ── Price refresh from a TCGplayer CSV export ───────────────────────────────
+// The export has one row per SKU (a condition of a printing), so rows are
+// grouped back into printings and the NM/LP/MP/HP/DMG ladder is rebuilt.
+// Product ids are NOT in the CSV — they come from the enrichment above, so the
+// existing prices.json is merged in rather than replaced.
+
+const COND_MAP = {
+  'near mint':'NM', 'nearmint':'NM', 'nm':'NM', 'mint':'NM',
+  'lightly played':'LP', 'lightplayed':'LP', 'lp':'LP', 'excellent':'LP',
+  'moderately played':'MP', 'mp':'MP', 'good':'MP',
+  'heavily played':'HP', 'hp':'HP', 'played':'HP', 'poor':'HP',
+  'damaged':'DMG', 'dmg':'DMG'
+};
+const csvLog = m => { const l=$('log-csv'); l.textContent += '\n'+m; l.scrollTop = l.scrollHeight; };
+
+/* Quote-aware line splitter — card names contain commas ("Hey, Listen!"). */
+function parseCsv(text) {
+  const rows = []; let row = [], cell = '', q = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (q) {
+      if (ch === '"') { if (text[i+1] === '"') { cell += '"'; i++; } else q = false; }
+      else cell += ch;
+    } else if (ch === '"') q = true;
+    else if (ch === ',') { row.push(cell); cell = ''; }
+    else if (ch === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (ch !== '\r') cell += ch;
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter(r => r.length > 1);
+}
+
+/* TCGplayer has renamed these columns over the years — match on substrings. */
+function detectColumns(header) {
+  const norm = header.map(h => h.toLowerCase().replace(/[^a-z]/g, ''));
+  const find = (...names) => {
+    for (const n of names) { const i = norm.indexOf(n); if (i > -1) return i; }
+    for (const n of names) { const i = norm.findIndex(h => h.includes(n)); if (i > -1) return i; }
+    return -1;
+  };
+  return {
+    sku:       find('tcgplayerid','productid','skuid','id'),
+    name:      find('productname','name','simplename'),
+    set:       find('setname','set','group','expansion'),
+    number:    find('number','cardnumber','collectornumber'),
+    rarity:    find('rarity'),
+    condition: find('condition'),
+    printing:  find('printing','variant','finish','subtypename'),
+    price:     find('tcgmarketprice','marketprice','tcgmarketpriceusd','price'),
+    low:       find('tcglowprice','lowprice','tcglowpricewithshipping'),
+    directlow: find('tcgdirectlow','directlow'),
+    line:      find('productline','game')
+  };
+}
+
+let csvRows = null, csvCols = null, csvBuilt = null;
+
+$('csv-file').onchange = async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $('log-csv').textContent = 'Reading ' + file.name + '…';
+  const text = await file.text();
+  csvRows = parseCsv(text);
+  if (csvRows.length < 2) { csvLog('No rows found.'); return; }
+  csvCols = detectColumns(csvRows[0]);
+
+  const need = ['name','set','condition','price'];
+  const missing = need.filter(k => csvCols[k] < 0);
+  const shown = Object.entries(csvCols)
+    .map(([k,i]) => `${k}: ${i > -1 ? '<b>'+csvRows[0][i]+'</b>' : '<span style="color:#c66">not found</span>'}`)
+    .join(' &middot; ');
+  $('csv-cols').innerHTML = shown;
+  csvLog(`${csvRows.length - 1} data rows, ${csvRows[0].length} columns.`);
+
+  if (missing.length) {
+    csvLog('MISSING required column(s): ' + missing.join(', ') + ' — cannot build.');
+    $('csv-go').disabled = true;
+  } else {
+    const sample = csvRows[1];
+    csvLog(`Sample row: ${sample[csvCols.name]} | ${sample[csvCols.set]} | ` +
+           `${csvCols.number > -1 ? sample[csvCols.number] : '?'} | ` +
+           `${sample[csvCols.condition]} | ${sample[csvCols.price]}`);
+    $('csv-go').disabled = false;
+  }
+};
+
+$('csv-go').onclick = async () => {
+  $('csv-go').disabled = true;
+  $('csv-prog').style.width = '5%';
+  csvLog('Loading existing prices.json to preserve product ids…');
+
+  let existing = [];
+  try {
+    const r = await fetch('data/prices.json');
+    if (r.ok) existing = await r.json();
+  } catch (e) { csvLog('Could not read existing prices.json — product ids will be lost.'); }
+
+  // key a printing by name|set|number|printing so a SKU row finds its group
+  const keyOf = (n, s, u, v) =>
+    [n, s, u, v || 'Normal'].map(x => String(x || '').toLowerCase().trim()).join('|');
+
+  const pidBy = new Map(), oldPriceBy = new Map();
+  for (const r of existing) {
+    const k = keyOf(r.n, r.s, r.u, r.v);
+    if (r.pid) pidBy.set(k, r.pid);
+    if (r.c && r.c.NM != null) oldPriceBy.set(k, r.c.NM);
+  }
+
+  const C = csvCols, out = new Map();
+  let skipped = 0;
+  for (let i = 1; i < csvRows.length; i++) {
+    const row = csvRows[i];
+    if (C.line > -1 && row[C.line] && !/pok/i.test(row[C.line])) { skipped++; continue; }
+
+    const name = (row[C.name] || '').trim();
+    const set  = (row[C.set]  || '').trim();
+    if (!name || !set) { skipped++; continue; }
+
+    const rawCond = (row[C.condition] || '').trim();
+    // "Near Mint Foil" carries the printing inside the condition on some exports
+    const foilInCond = /foil|holo/i.test(rawCond);
+    const condKey = COND_MAP[rawCond.toLowerCase().replace(/\s*(foil|holofoil|reverse holofoil).*/i,'').trim()]
+                 || COND_MAP[rawCond.toLowerCase()] || null;
+    if (!condKey) { skipped++; continue; }
+
+    let printing = C.printing > -1 ? (row[C.printing] || '').trim() : '';
+    if (!printing) printing = foilInCond ? (/reverse/i.test(rawCond) ? 'Reverse Holofoil' : 'Holofoil') : 'Normal';
+
+    const price = parseFloat(String(row[C.price] || '').replace(/[$,]/g, ''));
+    if (!(price > 0)) { skipped++; continue; }
+    // TCGplayer's lowest current listing. Not the full listing ladder, but it's
+    // the only signal in the export for "is the cheapest copy an outlier".
+    const low = C.low > -1 ? parseFloat(String(row[C.low] || '').replace(/[$,]/g, '')) : NaN;
+
+    const num = C.number > -1 ? (row[C.number] || '').trim() : '';
+    const k = keyOf(name, set, num, printing);
+    let rec = out.get(k);
+    if (!rec) {
+      rec = { i: C.sku > -1 ? String(row[C.sku] || '') : '', n: name, s: set, u: num,
+              r: C.rarity > -1 ? (row[C.rarity] || '').trim() : '', v: printing, c: {}, l: {} };
+      const pid = pidBy.get(k);
+      if (pid) rec.pid = pid;
+      out.set(k, rec);
+    }
+    rec.c[condKey] = price;
+    if (low > 0) { rec.l = rec.l || {}; rec.l[condKey] = low; }
+
+    if (i % 4000 === 0) {
+      $('csv-prog').style.width = Math.round((i / csvRows.length) * 90) + '%';
+      await new Promise(r => setTimeout(r));
+    }
+  }
+
+  csvBuilt = [...out.values()].filter(r => Object.keys(r.c).length);
+
+  // anything in the old file the CSV didn't mention stays, so nothing is lost
+  const newKeys = new Set(out.keys());
+  let carried = 0;
+  for (const r of existing) {
+    const k = keyOf(r.n, r.s, r.u, r.v);
+    if (!newKeys.has(k)) { csvBuilt.push(r); carried++; }
+  }
+
+  let changed = 0, withPid = 0;
+  for (const r of csvBuilt) {
+    const k = keyOf(r.n, r.s, r.u, r.v);
+    const before = oldPriceBy.get(k);
+    if (before != null && r.c.NM != null && Math.abs(before - r.c.NM) > 0.005) changed++;
+    if (r.pid) withPid++;
+  }
+
+  $('c-rows').textContent  = (csvRows.length - 1).toLocaleString();
+  $('c-print').textContent = csvBuilt.length.toLocaleString();
+  $('c-chg').textContent   = changed.toLocaleString();
+  $('c-pid').textContent   = withPid.toLocaleString();
+  $('csv-prog').style.width = '100%';
+
+  csvLog(`Built ${csvBuilt.length} printings from ${csvRows.length - 1} rows (${skipped} rows skipped).`);
+  csvLog(`${changed} prices changed · ${withPid} product ids kept · ${carried} printings carried over untouched.`);
+  if (withPid === 0) csvLog('WARNING: no product ids matched — images will be blank. Check the set names line up.');
+  $('csv-dl').disabled = false;
+  $('csv-go').disabled = false;
+};
+
+$('csv-dl').onclick = () => {
+  if (!csvBuilt) return;
+  const blob = new Blob([JSON.stringify(csvBuilt)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'prices.json';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+</script>
+</body>
+</html>
