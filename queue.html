@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect width=%2232%22 height=%2232%22 rx=%226%22 fill=%22%230D0D0F%22/%3E%3Cpath d=%22M16 6 L25 16 L16 26 L7 16 Z%22 fill=%22%23D4AF6A%22/%3E%3C/svg%3E">
+
+<script>
+/* ── ADMIN GATE ── change the passcode below, keep it out of screenshots ── */
+(function(){
+  var CODE = 'diamond-hands';   /* EDIT ME: pick your own passcode */
+  if (sessionStorage.getItem('pcAdminOK') === '1') return;
+  var e = prompt('Paragon Collectibles — admin passcode:');
+  if (e === CODE) { sessionStorage.setItem('pcAdminOK','1'); return; }
+  location.replace('https://paragoncollectiblesco.com');
+})();
+</script>
+
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PokéInventory — Review Queue</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .queue-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .queue-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+
+    .queue-card.approved { border-top: 3px solid #2e7d32; }
+    .queue-card.rejected { border-top: 3px solid #aaa; opacity: 0.5; }
+
+    .card-images {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      height: 160px;
+    }
+
+    .card-images .scan-img {
+      object-fit: cover;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #f0f0f0;
+    }
+
+    .card-images .tcg-img {
+      object-fit: contain;
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #f8f8f8;
+      padding: 4px;
+    }
+
+    .img-labels {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .img-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #999;
+      padding: 3px 8px;
+      background: #f5f5f5;
+      text-align: center;
+    }
+
+    .card-body { padding: 12px 14px; }
+
+    .card-name-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .card-name { font-weight: 600; font-size: 15px; line-height: 1.3; }
+    .card-meta { font-size: 12px; color: #666; margin-top: 2px; }
+
+    .score-badge {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 20px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .score-high { background: #e8f5e9; color: #2e7d32; }
+    .score-mid  { background: #fff8e1; color: #f57f17; }
+    .score-low  { background: #fff1ee; color: #E3350D; }
+    .score-ai   { background: #e8f1fb; color: #1A6BB5; }
+
+    .card-price {
+      font-size: 18px;
+      font-weight: 700;
+      color: #1A6BB5;
+      margin-bottom: 10px;
+    }
+
+    .card-price small {
+      font-size: 11px;
+      font-weight: 400;
+      color: #aaa;
+      margin-left: 4px;
+    }
+
+    .edit-fields { display: none; margin-bottom: 10px; }
+    .edit-fields.open { display: block; }
+
+    .edit-fields input, .edit-fields select {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid #e0e0e0;
+      border-radius: 7px;
+      font-size: 13px;
+      margin-bottom: 6px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .edit-fields input:focus, .edit-fields select:focus {
+      border-color: #1A6BB5;
+    }
+
+    .edit-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+    .card-actions {
+      display: flex;
+      gap: 6px;
+    }
+
+    .btn-approve {
+      flex: 1;
+      background: #2e7d32;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 9px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-approve:hover { background: #1b5e20; }
+
+    .btn-edit {
+      background: white;
+      color: #1A6BB5;
+      border: 1px solid #1A6BB5;
+      border-radius: 8px;
+      padding: 9px 14px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .btn-reject {
+      background: white;
+      color: #aaa;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 9px 10px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .btn-reject:hover { color: #E3350D; border-color: #E3350D; }
+
+    .lot-select {
+      width: 100%;
+      padding: 7px 10px;
+      border: 1px solid #e0e0e0;
+      border-radius: 7px;
+      font-size: 13px;
+      margin-bottom: 8px;
+      outline: none;
+      font-family: inherit;
+    }
+
+    .lot-select:focus { border-color: #2e7d32; }
+
+    .bulk-bar {
+      background: white;
+      border-radius: 10px;
+      padding: 14px 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .bulk-bar h3 { font-size: 15px; font-weight: 600; }
+    .bulk-bar p  { font-size: 13px; color: #666; }
+
+    .empty-queue {
+      text-align: center;
+      padding: 60px 20px;
+      color: #aaa;
+    }
+
+    .empty-queue .icon { font-size: 48px; margin-bottom: 12px; }
+    .empty-queue p { font-size: 15px; }
+
+    .filter-tabs {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 20px;
+    }
+
+    .filter-tab {
+      padding: 6px 16px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid #e0e0e0;
+      background: white;
+      color: #666;
+    }
+
+    .filter-tab.active {
+      background: #E3350D;
+      color: white;
+      border-color: #E3350D;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="logo">
+      <div class="pokeball"></div>
+      PokéInventory
+    </div>
+    <div class="nav-tabs">
+      <a href="index.html" style="text-decoration:none">
+        <button class="nav-tab">Lots</button>
+      </a>
+      <a href="index.html#cards" style="text-decoration:none">
+        <button class="nav-tab">All Cards</button>
+      </a>
+      <button class="nav-tab active">Review Queue</button>
+    </div>
+  </div>
+  <div class="header-actions">
+    <a href="scan.html">
+      <button class="btn btn-primary btn-sm">📷 Scan Cards</button>
+    </a>
+  </div>
+</header>
+
+<main>
+  <div class="bulk-bar">
+    <div>
+      <h3>Review Queue <span id="pending-count" style="color:#E3350D"></span></h3>
+      <p>Review scanned cards, fix any errors, then approve to add to a lot</p>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="bulk-lot-select" class="lot-select" style="width:200px;margin:0">
+        <option value="">Select lot for approvals…</option>
+      </select>
+      <button class="btn btn-primary btn-sm" onclick="approveAll()">Approve All Pending</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearRejected()">Clear Rejected</button>
+    </div>
+  </div>
+
+  <div class="filter-tabs">
+    <button class="filter-tab active" onclick="setFilter('pending', this)">Pending</button>
+    <button class="filter-tab" onclick="setFilter('approved', this)">Approved</button>
+    <button class="filter-tab" onclick="setFilter('all', this)">All</button>
+  </div>
+
+  <div class="queue-grid" id="queue-grid"></div>
+
+  <div class="empty-queue" id="empty-queue" style="display:none">
+    <div class="icon">✅</div>
+    <p id="empty-msg">No cards in the queue. Scan some cards on your phone!</p>
+    <br>
+    <a href="scan.html"><button class="btn btn-primary" style="margin-top:8px">📷 Start Scanning</button></a>
+  </div>
+</main>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, doc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD_8Q1x-2-WVYa5kGDT0Fj_VyuVjbS2UuU",
+  authDomain: "pokeinventory-3ee20.firebaseapp.com",
+  projectId: "pokeinventory-3ee20",
+  storageBucket: "pokeinventory-3ee20.firebasestorage.app",
+  messagingSenderId: "248123177716",
+  appId: "1:248123177716:web:6cdad358f21fcc99b7bca1"
+};
+
+const fbApp = initializeApp(firebaseConfig);
+const db    = getFirestore(fbApp);
+
+let allCards = [];
+let currentFilter = 'pending';
+let lots = JSON.parse(localStorage.getItem('pokeinv_lots') || '[]');
+
+// ── LOT SELECT ──────────────────────────────────────────────────────────────
+function populateLotSelects() {
+  const opts = '<option value="">Select lot…</option>' +
+    lots.map(l => `<option value="${l.id}">${l.name}</option>`).join('') +
+    '<option value="__new__">+ Create new lot</option>';
+  document.getElementById('bulk-lot-select').innerHTML =
+    '<option value="">Select lot for approvals…</option>' +
+    lots.map(l => `<option value="${l.id}">${l.name}</option>`).join('') +
+    '<option value="__new__">+ Create new lot</option>';
+  document.querySelectorAll('.card-lot-select').forEach(s => {
+    const cur = s.value;
+    s.innerHTML = opts;
+    s.value = cur;
+  });
+}
+
+// ── REAL-TIME QUEUE ─────────────────────────────────────────────────────────
+const q = query(collection(db, 'scan_queue'), orderBy('scannedAt', 'desc'));
+onSnapshot(q, snap => {
+  allCards = snap.docs.map(d => ({ _id: d.id, ...d.data() }));
+  const pending = allCards.filter(c => c.status === 'pending').length;
+  document.getElementById('pending-count').textContent =
+    pending > 0 ? `(${pending} pending)` : '';
+  renderQueue();
+});
+
+// ── RENDER ──────────────────────────────────────────────────────────────────
+window.setFilter = (f, btn) => {
+  currentFilter = f;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderQueue();
+};
+
+function renderQueue() {
+  const grid  = document.getElementById('queue-grid');
+  const empty = document.getElementById('empty-queue');
+  const emptyMsg = document.getElementById('empty-msg');
+
+  let visible = allCards;
+  if (currentFilter === 'pending')  visible = allCards.filter(c => c.status === 'pending');
+  if (currentFilter === 'approved') visible = allCards.filter(c => c.status === 'approved');
+
+  if (!visible.length) {
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    emptyMsg.textContent = currentFilter === 'pending'
+      ? 'No pending cards — scan some on your phone!'
+      : 'No cards in this filter.';
+    return;
+  }
+
+  empty.style.display = 'none';
+  populateLotSelects();
+
+  grid.innerHTML = visible.map(card => {
+    const scoreLabel = card.scanScore
+      ? `${card.scanScore}% scan match`
+      : 'AI identified';
+    const scoreClass = card.scanScore
+      ? (card.scanScore >= 85 ? 'score-high' : card.scanScore >= 65 ? 'score-mid' : 'score-low')
+      : 'score-ai';
+
+    const tcgImgHtml = card.imageUrl
+      ? `<img class="tcg-img" src="${card.imageUrl}" alt="TCGPlayer art" onerror="this.style.display='none'">`
+      : `<div class="tcg-img" style="display:flex;align-items:center;justify-content:center;color:#aaa;font-size:12px">No art found</div>`;
+
+    const lotOpts = '<option value="">Select lot…</option>' +
+      lots.map(l => `<option value="${l.id}">${l.name}</option>`).join('') +
+      '<option value="__new__">+ Create new lot</option>';
+
+    const isApproved = card.status === 'approved';
+
+    return `<div class="queue-card ${card.status}" id="qc-${card._id}">
+      <div class="card-images">
+        <img class="scan-img" src="${card.imageDataUrl||''}" alt="Your scan">
+        ${tcgImgHtml}
+      </div>
+      <div class="img-labels">
+        <div class="img-label">Your photo</div>
+        <div class="img-label">TCGPlayer match</div>
+      </div>
+      <div class="card-body">
+        <div class="card-name-row">
+          <div>
+            <div class="card-name">${card.name}</div>
+            <div class="card-meta">${card.set||'Unknown set'}${card.number?' · #'+card.number:''} · ${card.condition||'NM'}</div>
+          </div>
+          <span class="score-badge ${scoreClass}">${scoreLabel}</span>
+        </div>
+        <div class="card-price">
+          $${(card.tcgPrice||0).toFixed(2)}
+          <small>${card.priceIsLive ? '✓ live TCGPlayer' : 'estimated'}</small>
+        </div>
+
+        <div class="edit-fields" id="edit-${card._id}">
+          <input type="text" id="en-${card._id}" value="${card.name}" placeholder="Card name">
+          <div class="edit-row">
+            <input type="text" id="es-${card._id}" value="${card.set||''}" placeholder="Set">
+            <input type="text" id="enu-${card._id}" value="${card.number||''}" placeholder="Number">
+          </div>
+          <div class="edit-row">
+            <select id="ec-${card._id}">
+              <option ${card.condition==='NM'?'selected':''}>NM</option>
+              <option ${card.condition==='LP'?'selected':''}>LP</option>
+              <option ${card.condition==='MP'?'selected':''}>MP</option>
+              <option ${card.condition==='HP'?'selected':''}>HP</option>
+            </select>
+            <input type="number" id="ep-${card._id}" value="${card.tcgPrice||''}" placeholder="Price $" step="0.01">
+          </div>
+          <button onclick="saveEdit('${card._id}')" style="width:100%;background:#1A6BB5;color:white;border:none;border-radius:7px;padding:7px;font-size:13px;cursor:pointer;margin-bottom:6px">
+            Save Changes
+          </button>
+        </div>
+
+        ${!isApproved ? `<select class="lot-select card-lot-select" id="lot-${card._id}">${lotOpts}</select>` : ''}
+
+        <div class="card-actions">
+          ${!isApproved
+            ? `<button class="btn-approve" onclick="approveCard('${card._id}')">✓ Approve</button>`
+            : `<span style="color:#2e7d32;font-weight:600;font-size:13px">✓ Approved</span>`
+          }
+          <button class="btn-edit" onclick="toggleEdit('${card._id}')">Edit</button>
+          <button class="btn-reject" onclick="rejectCard('${card._id}')" title="Remove from queue">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── ACTIONS ─────────────────────────────────────────────────────────────────
+window.toggleEdit = (id) => {
+  const el = document.getElementById(`edit-${id}`);
+  el.classList.toggle('open');
+};
+
+window.saveEdit = async (id) => {
+  const name      = document.getElementById(`en-${id}`).value.trim();
+  const set       = document.getElementById(`es-${id}`).value.trim();
+  const number    = document.getElementById(`enu-${id}`).value.trim();
+  const condition = document.getElementById(`ec-${id}`).value;
+  const price     = parseFloat(document.getElementById(`ep-${id}`).value) || 0;
+
+  await updateDoc(doc(db, 'scan_queue', id), { name, set, number, condition, tcgPrice: price });
+  document.getElementById(`edit-${id}`).classList.remove('open');
+  showToast('Card updated');
+};
+
+window.approveCard = async (id) => {
+  const card   = allCards.find(c => c._id === id);
+  const lotId  = document.getElementById(`lot-${id}`)?.value;
+
+  if (!lotId) { showToast('Select a lot first', true); return; }
+
+  if (lotId === '__new__') {
+    const name = prompt('New lot name?');
+    if (!name) return;
+    const paid = parseFloat(prompt('Amount paid for this lot ($)?') || '0');
+    const newLot = {
+      id: 'lot_' + Date.now(), name, paid,
+      date: new Date().toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }),
+      cards: [], image: null
+    };
+    lots.unshift(newLot);
+    localStorage.setItem('pokeinv_lots', JSON.stringify(lots));
+    addCardToLot(newLot.id, card);
+  } else {
+    addCardToLot(lotId, card);
+  }
+
+  await updateDoc(doc(db, 'scan_queue', id), { status: 'approved', approvedAt: Date.now() });
+  showToast(`✓ Added to lot`);
+};
+
+function addCardToLot(lotId, card) {
+  const lot = lots.find(l => l.id === lotId);
+  if (!lot) return;
+  if (!lot.cards) lot.cards = [];
+  lot.cards.push({
+    name:        card.name,
+    set:         card.set || '',
+    number:      card.number || '',
+    condition:   card.condition || 'NM',
+    tcgPrice:    card.tcgPrice || 0,
+    priceIsLive: card.priceIsLive || false,
+    tcgUrl:      card.tcgUrl || null,
+    scanScore:   card.scanScore || null,
+    imageUrl:    card.imageUrl || null
+  });
+  localStorage.setItem('pokeinv_lots', JSON.stringify(lots));
+}
+
+window.rejectCard = async (id) => {
+  if (!confirm('Remove this card from the queue?')) return;
+  await deleteDoc(doc(db, 'scan_queue', id));
+};
+
+window.approveAll = async () => {
+  const lotId = document.getElementById('bulk-lot-select').value;
+  if (!lotId) { showToast('Select a lot first', true); return; }
+
+  const pending = allCards.filter(c => c.status === 'pending');
+  if (!pending.length) { showToast('No pending cards'); return; }
+
+  for (const card of pending) {
+    addCardToLot(lotId, card);
+    await updateDoc(doc(db, 'scan_queue', card._id), { status: 'approved', approvedAt: Date.now() });
+  }
+
+  showToast(`✓ ${pending.length} cards added to lot`);
+};
+
+window.clearRejected = async () => {
+  const approved = allCards.filter(c => c.status === 'approved');
+  if (!approved.length) { showToast('No approved cards to clear'); return; }
+  if (!confirm(`Remove ${approved.length} approved cards from queue?`)) return;
+  for (const card of approved) {
+    await deleteDoc(doc(db, 'scan_queue', card._id));
+  }
+  showToast('Queue cleared');
+};
+
+// ── TOAST ────────────────────────────────────────────────────────────────────
+function showToast(msg, error = false) {
+  const el = document.createElement('div');
+  el.className = 'toast' + (error ? ' error' : ' success');
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+</script>
+<div style="text-align:center;padding:16px;font-size:11px;color:#666;border-top:1px solid #333;margin-top:32px">PokéInventory · <strong>v1.8.0</strong> · Built Jun 16 2026</div>
+</body>
+</html>
