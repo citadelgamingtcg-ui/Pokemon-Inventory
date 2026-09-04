@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paragon — Pricing Logic Test</title>
+<style>
+  :root{--bg:#141210;--panel:#1b1815;--panel2:#221e1a;--line:#332e28;--ink:#efe7dc;
+        --sub:#8d8378;--gold:#c9a227;--green:#5fa86a;--red:#c0564b}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:Georgia,serif;padding:0 0 60px}
+  header{text-align:center;padding:26px 16px;border-bottom:1px solid var(--line)}
+  h1{margin:0;color:var(--gold);letter-spacing:.22em;font-size:26px}
+  .sub{color:var(--sub);letter-spacing:.3em;font-size:11px;margin-top:4px}
+  .tag{font-style:italic;margin-top:10px;font-size:14px}
+  .wrap{max-width:1100px;margin:0 auto;padding:22px 16px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:16px}
+  .btn{background:var(--gold);color:#241d05;border:0;padding:11px 20px;border-radius:7px;
+       font:inherit;font-weight:700;cursor:pointer;font-size:15px}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:14px}
+  .st{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;text-align:center}
+  .st .l{font-size:10px;letter-spacing:.13em;color:var(--sub);text-transform:uppercase}
+  .st .v{font-size:20px;font-weight:700;margin-top:4px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+  input[type=text],input[type=number],select{
+    background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    padding:9px 10px;border-radius:7px;font:inherit;font-size:14px}
+  input[type=text]{flex:1;min-width:180px}
+  label{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:6px}
+  table{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+  th{text-align:left;padding:8px;border-bottom:1px solid var(--line);color:var(--gold);
+     font-size:11px;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap}
+  th:hover{color:var(--ink)}
+  td{padding:7px 8px;border-bottom:1px solid var(--panel2);vertical-align:top}
+  tr:hover td{background:var(--panel2)}
+  .num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .tag-out{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;font-weight:700}
+  .tag-out.low{background:rgba(95,168,106,.18);color:var(--green)}
+  .tag-out.same{background:rgba(141,131,120,.18);color:var(--sub)}
+  .down{color:var(--red)}
+  .scrollbox{max-height:560px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+  .scrollbox table{margin-top:0}
+  .scrollbox thead th{position:sticky;top:0;background:var(--panel)}
+  .muted{color:var(--sub);font-size:13px;line-height:1.6}
+  .ver-badge { display:inline-block; margin-left:8px; padding:1px 7px; border-radius:99px;
+               font-size:11px; font-weight:600; background:rgba(212,175,106,.18);
+               color:#D4AF6A; border:1px solid rgba(212,175,106,.35); vertical-align:middle; }
+</style>
+<script src="js/version.js?v=3.83.0"></script>
+</head>
+<body>
+<header>
+  <h1>PARAGON <span id="app-version" class="ver-badge">v—</span></h1>
+  <div class="sub">PRICING LOGIC TEST</div>
+  <div class="tag">Market price vs. suggested price — review before making it live</div>
+</header>
+
+<div class="wrap">
+  <div class="card">
+    <div class="muted">
+      This runs <code>suggestPrice()</code> against every record in the current database that has both
+      a market price and a low price on file. It changes nothing in the app or your inventory — it's a
+      read-only comparison so you can sanity-check the numbers before this becomes the default anywhere.
+      <br><br>
+      Rule being tested: if the lowest current listing is at least 70% of market, price just above it
+      (low × 1.03). If it's below that, treat it as a likely outlier and keep market price.
+    </div>
+    <div class="row">
+      <button class="btn" id="run">Run the test</button>
+      <label><input type="checkbox" id="jp"> Include Japanese database too</label>
+    </div>
+    <div class="stats" id="stats" style="display:none">
+      <div class="st"><div class="l">Records tested</div><div class="v" id="s-total">—</div></div>
+      <div class="st"><div class="l">Priced off low</div><div class="v" id="s-low">—</div></div>
+      <div class="st"><div class="l">Kept at market</div><div class="v" id="s-market">—</div></div>
+      <div class="st"><div class="l">No low on file</div><div class="v" id="s-nolow">—</div></div>
+      <div class="st"><div class="l">Avg. discount</div><div class="v" id="s-avg">—</div></div>
+      <div class="st"><div class="l">Median discount</div><div class="v" id="s-med">—</div></div>
+    </div>
+  </div>
+
+  <div class="card" id="results" style="display:none">
+    <div class="row">
+      <input type="text" id="search" placeholder="Search a card name to spot-check it…">
+      <select id="filter">
+        <option value="all">Show all</option>
+        <option value="low">Only priced off low (changed)</option>
+        <option value="market">Only kept at market (outlier caught)</option>
+        <option value="nolow">Only no low price on file</option>
+        <option value="big">Only big swings (&gt;20% off market)</option>
+      </select>
+      <label>Sort: <select id="sort">
+        <option value="discount">Biggest discount first</option>
+        <option value="name">Name A→Z</option>
+        <option value="market">Market price, high to low</option>
+      </select></label>
+    </div>
+    <div class="muted" style="margin-top:8px" id="count"></div>
+    <div class="scrollbox">
+      <table>
+        <thead><tr>
+          <th>Card</th><th>Set</th>
+          <th class="num">Market</th><th class="num">Low</th><th class="num">Ratio</th>
+          <th class="num">Suggested</th><th>Basis</th>
+        </tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let rows = [];
+
+function suggestPrice(market, low) {
+  const floor = 0.70, over = 1.03;
+  if (!market && !low) return { price: 0, basis: 'none', outlier: false, ratio: null };
+  if (!low) return { price: market, basis: 'market (no low on file)', outlier: false, ratio: null };
+  if (!market) return { price: low, basis: 'low (no market on file)', outlier: false, ratio: null };
+  const ratio = low / market;
+  if (ratio < floor) {
+    return { price: Math.round(market * 100) / 100, basis: 'market — low looks like an outlier', outlier: true, ratio };
+  }
+  return { price: Math.round(Math.min(market, low * over) * 100) / 100, basis: 'just above lowest listing', outlier: false, ratio };
+}
+
+async function loadDB(includeJP) {
+  const en = await fetch('data/prices.json?v=' + (window.APP_VERSION || Date.now())).then(r => r.json());
+  let all = en.map(r => ({ ...r, _src: 'EN' }));
+  if (includeJP) {
+    try {
+      const jp = await fetch('data/prices-jp.json?v=' + (window.APP_VERSION || Date.now())).then(r => r.json());
+      all = all.concat(jp.map(r => ({ ...r, _src: 'JP' })));
+    } catch (e) { /* JP file optional */ }
+  }
+  return all;
+}
+
+function median(arr) {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((a,b)=>a-b);
+  const mid = Math.floor(s.length/2);
+  return s.length % 2 ? s[mid] : (s[mid-1]+s[mid])/2;
+}
+
+document.getElementById('run').onclick = async () => {
+  const btn = document.getElementById('run');
+  btn.disabled = true; btn.textContent = 'Loading…';
+  const includeJP = document.getElementById('jp').checked;
+  const data = await loadDB(includeJP);
+
+  rows = [];
+  for (const r of data) {
+    const market = r.c && r.c.NM;
+    const low = r.l && r.l.NM;
+    if (!market) continue;  // nothing to price off at all — genuinely skip these
+    const s = suggestPrice(market, low || 0);
+    rows.push({
+      name: (r.n || '').trim(),
+      set: r.s || '',
+      market, low: low || null, ratio: s.ratio, suggested: s.price, basis: s.basis, outlier: s.outlier,
+      noLow: !low,
+      discountPct: market ? Math.round((1 - s.price/market)*1000)/10 : 0
+    });
+  }
+
+  const total = rows.length;
+  const noLowCount = rows.filter(r => r.noLow).length;
+  const withLow = rows.filter(r => !r.noLow);
+  const lowCount = withLow.filter(r => !r.outlier).length;
+  const marketCount = withLow.filter(r => r.outlier).length;
+  const discounts = withLow.filter(r => !r.outlier).map(r => r.discountPct);
+  const avg = discounts.length ? (discounts.reduce((a,b)=>a+b,0)/discounts.length) : 0;
+
+  document.getElementById('s-total').textContent = total.toLocaleString();
+  document.getElementById('s-low').textContent = lowCount.toLocaleString() + ' (' + Math.round(lowCount/total*100) + '%)';
+  document.getElementById('s-market').textContent = marketCount.toLocaleString() + ' (' + Math.round(marketCount/total*100) + '%)';
+  document.getElementById('s-nolow').textContent = noLowCount.toLocaleString() + ' (' + Math.round(noLowCount/total*100) + '%)';
+  document.getElementById('s-avg').textContent = avg.toFixed(1) + '%';
+  document.getElementById('s-med').textContent = median(discounts).toFixed(1) + '%';
+  document.getElementById('stats').style.display = 'grid';
+  document.getElementById('results').style.display = 'block';
+
+  btn.disabled = false; btn.textContent = 'Re-run';
+  render();
+};
+
+function render() {
+  const q = document.getElementById('search').value.trim().toLowerCase();
+  const filter = document.getElementById('filter').value;
+  const sort = document.getElementById('sort').value;
+
+  let list = rows;
+  if (q) list = list.filter(r => r.name.toLowerCase().includes(q));
+  if (filter === 'low') list = list.filter(r => !r.noLow && !r.outlier);
+  if (filter === 'market') list = list.filter(r => !r.noLow && r.outlier);
+  if (filter === 'nolow') list = list.filter(r => r.noLow);
+  if (filter === 'big') list = list.filter(r => !r.noLow && !r.outlier && r.discountPct > 20);
+
+  list = [...list];
+  if (sort === 'discount') list.sort((a,b) => b.discountPct - a.discountPct);
+  if (sort === 'name') list.sort((a,b) => a.name.localeCompare(b.name));
+  if (sort === 'market') list.sort((a,b) => b.market - a.market);
+
+  const shown = list.slice(0, 500);
+  document.getElementById('count').textContent =
+    list.length.toLocaleString() + ' matching' + (list.length > 500 ? ' — showing first 500' : '');
+
+  document.getElementById('tbody').innerHTML = shown.map(r => `
+    <tr>
+      <td>${esc(r.name)}</td>
+      <td class="muted">${esc(r.set)}</td>
+      <td class="num">$${r.market.toFixed(2)}</td>
+      <td class="num">${r.noLow ? '<span class="muted">none on file</span>' : '$'+r.low.toFixed(2)}</td>
+      <td class="num">${r.ratio!=null ? Math.round(r.ratio*100)+'%' : '—'}</td>
+      <td class="num">$${r.suggested.toFixed(2)}${r.discountPct>0 ? ` <span class="down">(-${r.discountPct}%)</span>` : ''}</td>
+      <td><span class="tag-out ${r.noLow ? 'same' : (r.outlier?'same':'low')}">${r.noLow ? 'no low — stays at market' : (r.outlier?'kept market':'priced off low')}</span></td>
+    </tr>`).join('');
+}
+
+function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+document.getElementById('search').addEventListener('input', render);
+document.getElementById('filter').addEventListener('change', render);
+document.getElementById('sort').addEventListener('change', render);
+</script>
+</body>
+</html>
